@@ -1,150 +1,314 @@
 import { jsxRenderer } from 'hono/jsx-renderer'
 
-export const renderer = jsxRenderer(({ children, title }) => {
+export const renderer = jsxRenderer(({ children, title }: any) => {
   return (
-    <html lang="en" data-theme="cupcake">
+    <html data-theme="dark">
       <head>
-        <meta charSet="UTF-8" />
-        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-
-        <title>{title ?? 'Dashboard'}</title>
-
+        <meta charset="utf-8" />
+        <title>{title ?? "Dashboard"}</title>
         <link rel="stylesheet" href="/src/style.css" />
-
-        {/* Prevent theme flicker + save theme */}
-        <script
-          dangerouslySetInnerHTML={{
-            __html: `
-              const t = localStorage.getItem('theme') || 'cupcake';
-              document.documentElement.dataset.theme = t;
-
-              document.addEventListener('change', e => {
-                if(e.target.classList.contains('theme-controller')){
-                  const v = e.target.value;
-                  localStorage.setItem('theme', v);
-                  document.documentElement.dataset.theme = v;
-                }
-              });
-            `,
-          }}
-        />
       </head>
 
-      <body className="bg-base-200">
-        <div className="drawer lg:drawer-open">
+      <body class="bg-base-200">
 
-          <input id="my-drawer" type="checkbox" className="drawer-toggle" />
+        <div class="drawer lg:drawer-open">
+
+          <input id="sidebar" type="checkbox" class="drawer-toggle" />
 
           {/* PAGE CONTENT */}
-          <div className="drawer-content flex flex-col">
+          <div class="drawer-content flex flex-col">
 
-            {/* TOP NAVBAR */}
-            <div className="navbar bg-base-100 shadow-sm px-4">
+            {/* NAVBAR */}
+            <div class="navbar bg-base-100 border-b border-base-300 shadow-md sticky top-0 z-40">
 
-              {/* MOBILE MENU BUTTON */}
-              <div className="flex-1 lg:hidden">
-                <label htmlFor="my-drawer" className="btn btn-square btn-ghost">
+              <div class="flex-none lg:hidden">
+                <label for="sidebar" class="btn btn-square btn-ghost btn-lg">
                   ☰
                 </label>
               </div>
 
-              {/* RIGHT SIDE */}
-              <div className="flex-none">
+              <div class="flex-1 px-4">
+                <div class="breadcrumbs text-sm">
+                  <ul>
+                    <li><a class="link link-hover">Home</a></li>
+                    <li><a class="link link-hover">Dashboard</a></li>
+                    <li><span class="text-primary font-semibold">{title ?? "Overview"}</span></li>
+                  </ul>
+                </div>
+              </div>
 
-                {/* THEME DROPDOWN */}
-                <div className="dropdown dropdown-end">
+              <div class="flex items-center gap-3">
 
-                  <div tabIndex={0} role="button" className="btn btn-ghost">
-                    Themes
+                {/* SEARCH BAR */}
+                <div class="form-control hidden md:block">
+                  <input type="text" placeholder="Search threats, IPs, domains..." class="input input-bordered input-sm w-64 focus:input-primary transition-all" />
+                </div>
+
+                {/* SEARCH ICON - MOBILE */}
+                <button class="btn btn-ghost btn-circle md:hidden tooltip tooltip-left" data-tip="Search">
+                  🔍
+                </button>
+
+                {/* NOTIFICATIONS */}
+                <div class="dropdown dropdown-end">
+                  <button class="btn btn-ghost btn-circle indicator indicator-center tooltip tooltip-left" data-tip="Alerts (3 new)">
+                    <span class="indicator-item badge badge-error badge-xs font-bold">3</span>
+                    🔔
+                  </button>
+                  <ul class="dropdown-content menu p-3 shadow bg-base-100 rounded-box w-72 gap-2">
+                    <li class="menu-title"><span>Recent Alerts</span></li>
+                    <li><a class="hover:bg-error/10">
+                      <span class="badge badge-error badge-sm">Critical</span>
+                      DDoS attack detected on port 443
+                    </a></li>
+                    <li><a class="hover:bg-warning/10">
+                      <span class="badge badge-warning badge-sm">High</span>
+                      Malware signature matched on 3 hosts
+                    </a></li>
+                    <li><a class="hover:bg-info/10">
+                      <span class="badge badge-info badge-sm">Info</span>
+                      New vulnerability CVE-2024-1234
+                    </a></li>
+                  </ul>
+                </div>
+
+                {/* THEME TOGGLE */}
+                <div class="dropdown dropdown-end">
+                  <button class="btn btn-ghost btn-circle btn-md tooltip tooltip-left" data-tip="Theme">
+                    🎨
+                  </button>
+                  <ul class="dropdown-content menu p-2 shadow bg-base-100 rounded-box w-52">
+                    <li><input type="radio" name="theme-buttons" class="theme-controller" value="light" aria-label="Light" /></li>
+                    <li><input type="radio" name="theme-buttons" class="theme-controller" value="dark" aria-label="Dark" checked /></li>
+                    <li><input type="radio" name="theme-buttons" class="theme-controller" value="cyberpunk" aria-label="Cyberpunk" /></li>
+                  </ul>
+                </div>
+
+                {/* USER PROFILE */}
+                <div class="dropdown dropdown-end">
+
+                  <div tabindex={0} role="button" class="btn btn-ghost btn-circle avatar tooltip tooltip-left" data-tip="Profile">
+                    <div class="w-10 rounded-full bg-linear-to-br from-primary to-secondary text-primary-content flex items-center justify-center font-bold text-lg">
+                      AK
+                    </div>
                   </div>
 
-                  <ul
-                    tabIndex={0}
-                    className="dropdown-content z-[1] p-2 shadow-2xl bg-base-300 rounded-box w-52"
-                  >
-                    <li>
-                      <input
-                        type="radio"
-                        name="theme"
-                        value="default"
-                        aria-label="Default"
-                        className="theme-controller btn btn-sm btn-block btn-ghost justify-start"
-                      />
+                  <ul class="dropdown-content menu p-2 shadow bg-base-100 rounded-box w-56 gap-1">
+                    <li class="menu-title text-center py-2">
+                      <span>Admin Analyst</span>
                     </li>
-
-                    <li>
-                      <input
-                        type="radio"
-                        name="theme"
-                        value="retro"
-                        aria-label="Retro"
-                        className="theme-controller btn btn-sm btn-block btn-ghost justify-start"
-                      />
-                    </li>
-
-                    <li>
-                      <input
-                        type="radio"
-                        name="theme"
-                        value="cyberpunk"
-                        aria-label="Cyberpunk"
-                        className="theme-controller btn btn-sm btn-block btn-ghost justify-start"
-                      />
-                    </li>
-
-                    <li>
-                      <input
-                        type="radio"
-                        name="theme"
-                        value="valentine"
-                        aria-label="Valentine"
-                        className="theme-controller btn btn-sm btn-block btn-ghost justify-start"
-                      />
-                    </li>
-
-                    <li>
-                      <input
-                        type="radio"
-                        name="theme"
-                        value="aqua"
-                        aria-label="Aqua"
-                        className="theme-controller btn btn-sm btn-block btn-ghost justify-start"
-                      />
-                    </li>
+                    <div class="divider my-0"></div>
+                    <li><a class="hover:bg-primary/10">👤 Profile</a></li>
+                    <li><a class="hover:bg-info/10">⚙️ Settings</a></li>
+                    <li><a class="hover:bg-warning/10">📊 Activity Log</a></li>
+                    <div class="divider my-0"></div>
+                    <li><a class="text-error hover:bg-error/10">🚪 Logout</a></li>
                   </ul>
 
                 </div>
+
               </div>
             </div>
 
             {/* MAIN CONTENT */}
-            <main className="p-4 md:p-8">
+            <main class="p-4 md:p-8 flex-1">
               {children}
             </main>
 
+            {/* FOOTER */}
+            <footer class="footer footer-center bg-base-100 border-t border-base-300 p-4 text-base-content/70">
+              <div class="text-xs">
+                <p>© 2026 Project-K Intelligence | Security Dashboard v2.4</p>
+              </div>
+            </footer>
+
           </div>
+
 
           {/* SIDEBAR */}
-          <div className="drawer-side">
+          <div class="drawer-side">
+            <label for="sidebar" class="drawer-overlay"></label>
 
-            <label htmlFor="my-drawer" className="drawer-overlay"></label>
+            <aside class="w-72 bg-base-100 border-r border-base-300 flex flex-col h-screen">
 
-            <ul className="menu p-4 w-80 min-h-full bg-base-100 text-base-content">
+              {/* SIDEBAR HEADER */}
+              <div class="p-3 border-b border-base-300 shrink-0">
+                <div class="flex items-center gap-2">
+                  <div class="badge badge-primary badge-md">◆</div>
+                  <div>
+                    <div class="font-bold text-primary text-sm leading-tight">
+                      Project-K
+                    </div>
+                    <div class="text-xs opacity-50">
+                      Cyber Intel
+                    </div>
+                  </div>
+                </div>
+              </div>
 
-              <li className="text-xl font-bold p-4 text-primary">
-                MVP Dashboard
-              </li>
+              {/* SIDEBAR MENU - SCROLLABLE */}
+              <div class="flex-1 overflow-y-auto">
+                <ul class="menu w-full px-2 py-1 gap-0.5 text-sm">
 
-              <div className="divider">Menu</div>
+                  <li class="menu-title text-xs font-bold opacity-60 py-1">
+                    <span>MAIN</span>
+                  </li>
 
-              <li><a href="/">Dashboard</a></li>
-              <li><a href="/components">Components</a></li>
-              <li><a href="/layouts">Layouts</a></li>
+                  <li>
+                    <a class="active">
+                      <span>📊</span>
+                      Dashboard
+                    </a>
+                  </li>
 
-            </ul>
+                  <li class="menu-title text-xs font-bold opacity-60 py-1">
+                    <span>INTELLIGENCE</span>
+                  </li>
 
+                  <li>
+                    <details open>
+                      <summary>
+                        <span>🎯</span>
+                        Threat Detection
+                      </summary>
+                      <ul>
+                        <li><a class="text-sm">Active Threats</a></li>
+                        <li><a class="text-sm">Threat Timeline</a></li>
+                        <li><a class="text-sm">Blocked Attacks</a></li>
+                        <li><a class="text-sm">Indicators</a></li>
+                      </ul>
+                    </details>
+                  </li>
+
+                  <li>
+                    <details>
+                      <summary>
+                        <span>🛡️</span>
+                        Vulnerabilities
+                      </summary>
+                      <ul>
+                        <li><a class="text-sm">Critical</a></li>
+                        <li><a class="text-sm">High</a></li>
+                        <li><a class="text-sm">Medium</a></li>
+                        <li><a class="text-sm">Scan Results</a></li>
+                      </ul>
+                    </details>
+                  </li>
+
+                  <li>
+                    <details>
+                      <summary>
+                        <span>🌐</span>
+                        Network Recon
+                      </summary>
+                      <ul>
+                        <li><a class="text-sm">Whois Lookup</a></li>
+                        <li><a class="text-sm">Port Scanning</a></li>
+                        <li><a class="text-sm">DNS Resolution</a></li>
+                        <li><a class="text-sm">IP Intel</a></li>
+                      </ul>
+                    </details>
+                  </li>
+
+                  <li class="menu-title text-xs font-bold opacity-60 py-1">
+                    <span>TOOLS</span>
+                  </li>
+
+                  <li>
+                    <a>
+                      <span>📡</span>
+                      HTTP Proxy
+                      <span class="badge badge-xs badge-success">Live</span>
+                    </a>
+                  </li>
+
+                  <li>
+                    <a>
+                      <span>🧩</span>
+                      MISP Integration
+                    </a>
+                  </li>
+
+                  <li class="menu-title text-xs font-bold opacity-60 py-1">
+                    <span>MANAGEMENT</span>
+                  </li>
+
+                  <li>
+                    <details>
+                      <summary>
+                        <span>📋</span>
+                        Reports
+                      </summary>
+                      <ul>
+                        <li><a class="text-sm">Daily Summary</a></li>
+                        <li><a class="text-sm">Weekly Report</a></li>
+                        <li><a class="text-sm">Custom Report</a></li>
+                        <li><a class="text-sm">Export</a></li>
+                      </ul>
+                    </details>
+                  </li>
+
+                  <li>
+                    <a>
+                      <span>📜</span>
+                      Audit Log
+                    </a>
+                  </li>
+
+                  <li>
+                    <a>
+                      <span>⚕️</span>
+                      Health Check
+                      <span class="badge badge-xs badge-success">OK</span>
+                    </a>
+                  </li>
+
+                  <li class="menu-title text-xs font-bold opacity-60 py-1">
+                    <span>SYSTEM</span>
+                  </li>
+
+                  <li>
+                    <details>
+                      <summary>
+                        <span>⚙️</span>
+                        Configuration
+                      </summary>
+                      <ul>
+                        <li><a class="text-sm">General Settings</a></li>
+                        <li><a class="text-sm">Security</a></li>
+                        <li><a class="text-sm">Integrations</a></li>
+                        <li><a class="text-sm">API Keys</a></li>
+                      </ul>
+                    </details>
+                  </li>
+
+                </ul>
+              </div>
+
+              {/* SIDEBAR FOOTER */}
+              <div class="border-t border-base-300 p-2.5 space-y-1.5 mt-auto shrink-0">
+                {/* STATUS INDICATOR */}
+                <div class="badge badge-md badge-outline w-full gap-1 text-xs">
+                  <span class="status status-success status-xs"></span>
+                  All Systems OK
+                </div>
+
+                {/* ACTION BUTTON */}
+                <button class="btn btn-primary btn-sm w-full">
+                  💬 Report
+                </button>
+
+                {/* HELP LINK */}
+                <a class="link link-hover text-xs opacity-50 block text-center">
+                  Help
+                </a>
+              </div>
+
+            </aside>
           </div>
+
         </div>
+
       </body>
     </html>
   )
