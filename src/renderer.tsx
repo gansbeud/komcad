@@ -2,7 +2,7 @@ import { jsxRenderer } from 'hono/jsx-renderer'
 
 export const renderer = jsxRenderer(({ children, title }: any) => {
   return (
-    <html data-theme="dark">
+    <html>
       <head>
         <meta charset="utf-8" />
         <title>{title ?? "Dashboard"}</title>
@@ -74,16 +74,49 @@ export const renderer = jsxRenderer(({ children, title }: any) => {
 
                 {/* THEME TOGGLE */}
                 <div class="dropdown dropdown-end">
-                  <button class="btn btn-ghost btn-circle btn-md tooltip tooltip-left" data-tip="Theme">
+                  <button class="btn btn-ghost btn-circle tooltip tooltip-left" data-tip="Theme">
                     🎨
                   </button>
-                  <ul class="dropdown-content menu p-2 shadow bg-base-100 rounded-box w-52">
-                    <li><input type="radio" name="theme-buttons" class="theme-controller" value="light" aria-label="Light" /></li>
-                    <li><input type="radio" name="theme-buttons" class="theme-controller" value="dark" aria-label="Dark" checked /></li>
-                    <li><input type="radio" name="theme-buttons" class="theme-controller" value="cyberpunk" aria-label="Cyberpunk" /></li>
+
+                  <ul class="dropdown-content menu shadow-lg bg-base-100 rounded-box w-53 max-h-200 overflow-y-auto p-2 gap-1">
+                    <li><input type="radio" name="theme" class="theme-controller btn btn-sm btn-outline justify-start" value="light" aria-label="Light"/></li>
+                    <li><input type="radio" name="theme" class="theme-controller btn btn-sm btn-outline justify-start" value="dark" aria-label="Dark" checked/></li>
+                    <li><input type="radio" name="theme" class="theme-controller btn btn-sm btn-outline justify-start" value="cupcake" aria-label="Cupcake"/></li>
+                    <li><input type="radio" name="theme" class="theme-controller btn btn-sm btn-outline justify-start" value="bumblebee" aria-label="Bumblebee"/></li>
+                    <li><input type="radio" name="theme" class="theme-controller btn btn-sm btn-outline justify-start" value="emerald" aria-label="Emerald"/></li>
+                    <li><input type="radio" name="theme" class="theme-controller btn btn-sm btn-outline justify-start" value="corporate" aria-label="Corporate"/></li>
+                    <li><input type="radio" name="theme" class="theme-controller btn btn-sm btn-outline justify-start" value="synthwave" aria-label="Synthwave"/></li>
+                    <li><input type="radio" name="theme" class="theme-controller btn btn-sm btn-outline justify-start" value="retro" aria-label="Retro"/></li>
+                    <li><input type="radio" name="theme" class="theme-controller btn btn-sm btn-outline justify-start" value="cyberpunk" aria-label="Cyberpunk"/></li>
+                    <li><input type="radio" name="theme" class="theme-controller btn btn-sm btn-outline justify-start" value="valentine" aria-label="Valentine"/></li>
+                    <li><input type="radio" name="theme" class="theme-controller btn btn-sm btn-outline justify-start" value="halloween" aria-label="Halloween"/></li>
+                    <li><input type="radio" name="theme" class="theme-controller btn btn-sm btn-outline justify-start" value="garden" aria-label="Garden"/></li>
+                    <li><input type="radio" name="theme" class="theme-controller btn btn-sm btn-outline justify-start" value="forest" aria-label="Forest"/></li>
+                    <li><input type="radio" name="theme" class="theme-controller btn btn-sm btn-outline justify-start" value="aqua" aria-label="Aqua"/></li>
+                    <li><input type="radio" name="theme" class="theme-controller btn btn-sm btn-outline justify-start" value="lofi" aria-label="Lo-Fi"/></li>
+                    <li><input type="radio" name="theme" class="theme-controller btn btn-sm btn-outline justify-start" value="pastel" aria-label="Pastel"/></li>
+                    <li><input type="radio" name="theme" class="theme-controller btn btn-sm btn-outline justify-start" value="fantasy" aria-label="Fantasy"/></li>
+                    <li><input type="radio" name="theme" class="theme-controller btn btn-sm btn-outline justify-start" value="wireframe" aria-label="Wireframe"/></li>
+                    <li><input type="radio" name="theme" class="theme-controller btn btn-sm btn-outline justify-start" value="black" aria-label="Black"/></li>
+                    <li><input type="radio" name="theme" class="theme-controller btn btn-sm btn-outline justify-start" value="luxury" aria-label="Luxury"/></li>
+                    <li><input type="radio" name="theme" class="theme-controller btn btn-sm btn-outline justify-start" value="dracula" aria-label="Dracula"/></li>
+                    <li><input type="radio" name="theme" class="theme-controller btn btn-sm btn-outline justify-start" value="cmyk" aria-label="CMYK"/></li>
+                    <li><input type="radio" name="theme" class="theme-controller btn btn-sm btn-outline justify-start" value="autumn" aria-label="Autumn"/></li>
+                    <li><input type="radio" name="theme" class="theme-controller btn btn-sm btn-outline justify-start" value="business" aria-label="Business"/></li>
+                    <li><input type="radio" name="theme" class="theme-controller btn btn-sm btn-outline justify-start" value="acid" aria-label="Acid"/></li>
+                    <li><input type="radio" name="theme" class="theme-controller btn btn-sm btn-outline justify-start" value="lemonade" aria-label="Lemonade"/></li>
+                    <li><input type="radio" name="theme" class="theme-controller btn btn-sm btn-outline justify-start" value="night" aria-label="Night"/></li>
+                    <li><input type="radio" name="theme" class="theme-controller btn btn-sm btn-outline justify-start" value="coffee" aria-label="Coffee"/></li>
+                    <li><input type="radio" name="theme" class="theme-controller btn btn-sm btn-outline justify-start" value="winter" aria-label="Winter"/></li>
+                    <li><input type="radio" name="theme" class="theme-controller btn btn-sm btn-outline justify-start" value="dim" aria-label="Dim"/></li>
+                    <li><input type="radio" name="theme" class="theme-controller btn btn-sm btn-outline justify-start" value="nord" aria-label="Nord"/></li>
+                    <li><input type="radio" name="theme" class="theme-controller btn btn-sm btn-outline justify-start" value="sunset" aria-label="Sunset"/></li>
+                    <li><input type="radio" name="theme" class="theme-controller btn btn-sm btn-outline justify-start" value="caramellatte" aria-label="Caramel Latte"/></li>
+                    <li><input type="radio" name="theme" class="theme-controller btn btn-sm btn-outline justify-start" value="abyss" aria-label="Abyss"/></li>
+                    <li><input type="radio" name="theme" class="theme-controller btn btn-sm btn-outline justify-start" value="silk" aria-label="Silk"/></li>
                   </ul>
                 </div>
-
+                
                 {/* USER PROFILE */}
                 <div class="dropdown dropdown-end">
 

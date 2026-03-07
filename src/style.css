@@ -1,15 +1,13 @@
 @import "tailwindcss";
 
 @plugin "daisyui" {
-  /* Register your custom theme alongside the defaults */
-  themes: deepcloud, light, dark, cupcake, retro, cyberpunk, valentine, aqua;
+  /* Register all available themes */
+  themes: light --default, dark , cupcake, bumblebee, emerald, corporate, synthwave --prefersdark, retro, cyberpunk, valentine, halloween, garden, forest, aqua, lofi, pastel, fantasy, wireframe, black, luxury, dracula, cmyk, autumn, business, acid, lemonade, night, coffee, winter, dim, nord, sunset, caramellatte, abyss, silk, deepcloud;
 }
 
 /* Define your custom theme properly for Tailwind v4 */
 @plugin "daisyui/theme" {
   name: "deepcloud";
-  default: true;
-  prefersdark: true; /* Since your base colors are dark oklch */
   color-scheme: "dark";
   
   /* Brand Colors */
