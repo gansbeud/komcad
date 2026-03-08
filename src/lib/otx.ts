@@ -62,7 +62,6 @@ export async function checkOTX(indicator: string): Promise<OTXIndicatorResult | 
     }
 
     const data = await response.json()
-    console.log('OTX API response:', JSON.stringify(data, null, 2))
     return data || null
   } catch (error) {
     console.error('OTX fetch error:', error)
