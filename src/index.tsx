@@ -25,10 +25,10 @@ app.get('/', (c) => {
       {/* TOP STATS WITH ANIMATIONS */}
       <div class="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 mb-2">
         {[
-          { icon: '🎯', title: 'Threats Detected', value: '247', desc: '↗ 12% from last week', color: 'error', trend: 'up' },
-          { icon: '✓', title: 'Blocked Attacks', value: '1,284', desc: '↗ 5.2% from last week', color: 'success', trend: 'up' },
-          { icon: '⚠️', title: 'Vulnerabilities', value: '42', desc: '↘ 3 patched this week', color: 'warning', trend: 'down' },
-          { icon: '📡', title: 'Network Uptime', value: '99.8%', desc: '↗ 0.1% from last month', color: 'info', trend: 'up' }
+          { icon: '🎯', title: 'Threats Detected', value: '247', desc: '↗ 12% from last week', color: 'error', trend: 'up', goodTrend: false },
+          { icon: '✓', title: 'Blocked Attacks', value: '1,284', desc: '↗ 5.2% from last week', color: 'success', trend: 'up', goodTrend: true },
+          { icon: '⚠️', title: 'Vulnerabilities', value: '42', desc: '↘ 3 patched this week', color: 'warning', trend: 'down', goodTrend: false },
+          { icon: '📡', title: 'Network Uptime', value: '99.8%', desc: '↗ 0.1% from last month', color: 'info', trend: 'up', goodTrend: true }
         ].map((stat) => (
           <div key={stat.title} class="card bg-base-100 shadow-md hover:shadow-lg transition-all duration-300 border border-base-300 hover:border-base-400">
             <div class="card-body p-4">
@@ -38,7 +38,7 @@ app.get('/', (c) => {
                   <h3 class="text-xs font-bold opacity-70 uppercase">{stat.title}</h3>
                   <div class={`text-3xl font-bold mt-1 text-${stat.color}`}>{stat.value}</div>
                 </div>
-                <div class={`badge badge-${stat.color} badge-outline ${stat.trend === 'up' ? 'badge-error' : 'badge-warning'}`}>
+                <div class={`badge badge-outline text-xs ${ (stat.trend === 'up') === stat.goodTrend ? 'badge-success' : 'badge-error' }`}>
                   {stat.desc}
                 </div>
               </div>

@@ -159,11 +159,13 @@ intelligence.post('/api/check', async (c) => {
           </button>
         </div>
 
-        {/* Hidden payload for copy-JSON */}
-        <div
+        {/* Hidden payload for copy-JSON — stored in a script tag to avoid HTML attribute encoding issues */}
+        <script
           id="resultsData"
-          style="display:none"
-          data-results={JSON.stringify({ mode, source, results }).replace(/"/g, '&quot;')}
+          type="application/json"
+          dangerouslySetInnerHTML={{
+            __html: JSON.stringify({ mode, source, results }).replace(/<\/script/gi, '<\/script'),
+          }}
         />
       </div>
     )
@@ -274,8 +276,6 @@ intelligence.get('/', (c) => {
               id="indicatorsInput"
               placeholder={`Enter indicators (one per line):\n- Single line → Single Mode\n- Multiple lines → Bulk Mode`}
               class="textarea textarea-bordered h-36 focus:textarea-primary w-full resize-none mb-5"
-              onchange="updateModeFromInput()"
-              onkeyup="updateModeFromInput()"
             />
 
             <button type="submit" class="btn btn-primary w-full">
@@ -421,7 +421,7 @@ intelligence.get('/', (c) => {
         copyJsonBtn.addEventListener('click', function () {
           var el = resultsArea.querySelector('#resultsData');
           if (el) {
-            try { navigator.clipboard.writeText(JSON.stringify(JSON.parse(el.getAttribute('data-results')), null, 2)); }
+            try { navigator.clipboard.writeText(JSON.stringify(JSON.parse(el.textContent || '{}'), null, 2)); }
             catch (e) { console.error('Copy failed', e); }
           }
         });

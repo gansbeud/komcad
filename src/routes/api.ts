@@ -37,30 +37,31 @@ api.post('/check', async (c) => {
       return c.json({ error: `Source ${source} not available yet` }, 400)
     }
 
+    // Pre-filter empty lines so total_indicators reflects actual work done
+    const validIndicators = indicators.map((i) => i.trim()).filter((i) => i.length > 0)
     const results: CheckResult[] = []
 
-    for (const indicator of indicators) {
-      const trimmedIndicator = indicator.trim()
-      if (!trimmedIndicator) continue
+    for (const trimmedIndicator of validIndicators) {
 
       try {
         let result = null
 
         switch (source) {
-          case 'AbuseIPDB':
+          case 'AbuseIPDB': {
             const abuseResult = await checkAbuseIPDB(trimmedIndicator)
             result = formatAbuseIPDBResult(abuseResult)
             break
-
-          case 'VirusTotal':
+          }
+          case 'VirusTotal': {
             const vtResult = await checkVirusTotal(trimmedIndicator)
             result = formatVirusTotalResult(vtResult, trimmedIndicator)
             break
-
-          case 'OTX Alienvault':
+          }
+          case 'OTX Alienvault': {
             const otxResult = await checkOTX(trimmedIndicator)
             result = formatOTXResult(otxResult, trimmedIndicator)
             break
+          }
         }
 
         results.push({
@@ -81,7 +82,7 @@ api.post('/check', async (c) => {
     return c.json({
       mode: mode,
       source: source,
-      total_indicators: indicators.length,
+      total_indicators: results.length,
       results: results
     })
   } catch (error) {

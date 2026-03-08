@@ -29,8 +29,8 @@ export async function checkOTX(indicator: string): Promise<OTXIndicatorResult | 
     if (/^(\d{1,3}\.){3}\d{1,3}$/.test(indicator)) {
       // IPv4
       endpoint = `https://otx.alienvault.com/api/v1/indicators/IPv4/${indicator}/general`
-    } else if (/^[a-fA-F0-9:]+$/.test(indicator) && indicator.includes(':')) {
-      // IPv6
+    } else if (/^([0-9a-fA-F]{0,4}:){2,7}[0-9a-fA-F]{0,4}$/.test(indicator)) {
+      // IPv6 — requires at least 2 colon-separated groups (handles compressed notation)
       endpoint = `https://otx.alienvault.com/api/v1/indicators/IPv6/${indicator}/general`
     } else if (/^[a-fA-F0-9]{32}$|^[a-fA-F0-9]{40}$|^[a-fA-F0-9]{64}$/.test(indicator)) {
       // File hash

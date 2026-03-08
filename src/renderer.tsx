@@ -227,59 +227,60 @@ export const renderer = jsxRenderer(({ children, title }: any, c: any) => {
                   </li>
 
                   <li class="menu-disabled opacity-60 cursor-not-allowed">
-                    <a class="h-12">
+                    <a class="h-12" tabindex={-1} aria-disabled="true">
                       <span class="text-xl">🌐</span>
                       <span class="text-base font-semibold">Whois</span>
                     </a>
                   </li>
 
                   <li class="menu-disabled opacity-60 cursor-not-allowed">
-                    <a class="h-12">
+                    <a class="h-12" tabindex={-1} aria-disabled="true">
                       <span class="text-xl">🔎</span>
                       <span class="text-base font-semibold">NMAP / RustScan</span>
                     </a>
                   </li>
 
                   <li class="menu-disabled opacity-60 cursor-not-allowed">
-                    <a class="h-12">
+                    <a class="h-12" tabindex={-1} aria-disabled="true">
                       <span class="text-xl">📡</span>
                       <span class="text-base font-semibold">HTTP Proxy</span>
                     </a>
                   </li>
 
                   <li class="menu-disabled opacity-60 cursor-not-allowed">
-                    <a class="h-12">
+                    <a class="h-12" tabindex={-1} aria-disabled="true">
                       <span class="text-xl">🧩</span>
                       <span class="text-base font-semibold">MISP</span>
                     </a>
                   </li>
 
                   <li class="menu-disabled opacity-60 cursor-not-allowed">
-                    <a class="h-12">
+                    <a class="h-12" tabindex={-1} aria-disabled="true">
                       <span class="text-xl">📋</span>
                       <span class="text-base font-semibold">Report Utility</span>
                     </a>
                   </li>
 
                   <li class="menu-disabled opacity-60 cursor-not-allowed">
-                    <a class="h-12">
+                    <a class="h-12" tabindex={-1} aria-disabled="true">
                       <span class="text-xl">📜</span>
                       <span class="text-base font-semibold">Audit Log</span>
                     </a>
                   </li>
 
                   <li class="menu-disabled opacity-60 cursor-not-allowed">
-                    <a class="h-12">
+                    <a class="h-12" tabindex={-1} aria-disabled="true">
                       <span class="text-xl">⚕️</span>
                       <span class="text-base font-semibold">Health</span>
                     </a>
                   </li>
 
                   <li class="menu-disabled opacity-60 cursor-not-allowed">
-                    <a class="h-12">
+                    <a class="h-12" tabindex={-1} aria-disabled="true">
                       <span class="text-xl">⚙️</span>
                       <span class="text-base font-semibold">Configuration</span>
                     </a>
+
                   </li>
 
                 </ul>

@@ -17,8 +17,8 @@ export async function checkAbuseIPDB(indicator: string): Promise<AbuseIPDBResult
     throw new Error('ABUSEIPDB_API_KEY not configured')
   }
 
-  // Only supports IPv4 addresses
-  const ipv4Regex = /^(\d{1,3}\.){3}\d{1,3}$/
+  // Only supports IPv4 addresses — validate each octet is 0-255
+  const ipv4Regex = /^(25[0-5]|2[0-4]\d|1\d{2}|[1-9]\d|\d)\.(25[0-5]|2[0-4]\d|1\d{2}|[1-9]\d|\d)\.(25[0-5]|2[0-4]\d|1\d{2}|[1-9]\d|\d)\.(25[0-5]|2[0-4]\d|1\d{2}|[1-9]\d|\d)$/
   if (!ipv4Regex.test(indicator)) {
     return null
   }
