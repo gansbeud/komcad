@@ -1,12 +1,33 @@
 import { jsxRenderer } from 'hono/jsx-renderer'
 
-export const renderer = jsxRenderer(({ children, title }: any) => {
+export const renderer = jsxRenderer(({ children, title }: any, c: any) => {
+  // For htmx partial navigation: return only the content fragment.
+  // The sidebar/navbar stay mounted — no flicker.
+  if (c.req.header('HX-Request')) {
+    c.header('HX-Title', title ?? 'Dashboard')
+    return (
+      <>
+        {/* OOB-swap the breadcrumb title so it stays in sync */}
+        <span
+          id="breadcrumb-current"
+          {...{ 'hx-swap-oob': 'true' }}
+          class="text-primary font-semibold"
+        >
+          {title ?? 'Overview'}
+        </span>
+        {children}
+      </>
+    )
+  }
+
   return (
     <html>
       <head>
         <meta charset="utf-8" />
         <title>{title ?? "Dashboard"}</title>
         <link rel="stylesheet" href="/src/style.css" />
+        {/* htmx — enables SPA-like partial navigation without a full page reload */}
+        <script src="https://unpkg.com/htmx.org@2.0.4/dist/htmx.min.js" />
       </head>
 
       <body class="bg-base-200">
@@ -32,7 +53,7 @@ export const renderer = jsxRenderer(({ children, title }: any) => {
                   <ul>
                     <li><a href="/" class="link link-hover">Home</a></li>
                     <li><a href="/" class="link link-hover">Dashboard</a></li>
-                    <li><span class="text-primary font-semibold">{title ?? "Overview"}</span></li>
+                    <li><span id="breadcrumb-current" class="text-primary font-semibold">{title ?? 'Overview'}</span></li>
                   </ul>
                 </div>
               </div>
@@ -144,7 +165,7 @@ export const renderer = jsxRenderer(({ children, title }: any) => {
             </div>
 
             {/* MAIN CONTENT */}
-            <main class="p-4 md:p-8 flex-1">
+            <main id="page-content" class="p-4 md:p-8 flex-1">
               {children}
             </main>
 
@@ -184,14 +205,22 @@ export const renderer = jsxRenderer(({ children, title }: any) => {
                 <ul class="menu w-full px-3 py-2 gap-2 text-sm">
 
                   <li>
-                    <a href="/" class="h-12 active hover:bg-primary/20">
+                    <a
+                      {...{ 'hx-get': '/', 'hx-target': '#page-content', 'hx-push-url': 'true', 'hx-swap': 'innerHTML' }}
+                      class="h-12 hover:bg-primary/20 nav-link"
+                      data-path="/"
+                    >
                       <span class="text-xl">📊</span>
                       <span class="text-base font-semibold">Dashboard</span>
                     </a>
                   </li>
 
                   <li>
-                    <a href="/intelligence" class="h-12 hover:bg-primary/20">
+                    <a
+                      {...{ 'hx-get': '/intelligence', 'hx-target': '#page-content', 'hx-push-url': 'true', 'hx-swap': 'innerHTML' }}
+                      class="h-12 hover:bg-primary/20 nav-link"
+                      data-path="/intelligence"
+                    >
                       <span class="text-xl">🔍</span>
                       <span class="text-base font-semibold">Intelligence</span>
                     </a>
@@ -279,6 +308,21 @@ export const renderer = jsxRenderer(({ children, title }: any) => {
           </div>
 
         </div>
+
+        {/* Keep active sidebar link in sync with the current URL (initial load + htmx navigations) */}
+        <script dangerouslySetInnerHTML={{ __html: `
+          (function () {
+            function syncNav() {
+              var p = location.pathname.replace(/\/$/, '') || '/';
+              document.querySelectorAll('.nav-link').forEach(function (el) {
+                var target = (el.getAttribute('data-path') || '').replace(/\/$/, '') || '/';
+                el.classList.toggle('active', target === p);
+              });
+            }
+            syncNav();
+            document.addEventListener('htmx:afterSettle', syncNav);
+          })();
+        `}} />
 
       </body>
     </html>

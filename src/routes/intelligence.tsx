@@ -210,7 +210,7 @@ intelligence.get('/', (c) => {
         <div class="card-body gap-5">
           <h2 class="card-title">🔍 Check Indicators</h2>
 
-          <form id="checkForm" onsubmit="handleFormSubmit(event)">
+          <form id="checkForm">
             {/* MODE SELECTOR */}
             <div class="mb-5">
               <label class="label pb-1">
