@@ -3,6 +3,7 @@ interface VirusTotalStats {
   suspicious: number
   undetected: number
   harmless: number
+  timeout?: number
 }
 
 interface VirusTotalResult {
@@ -14,6 +15,17 @@ interface VirusTotalResult {
     meaningful_name?: string
     tags?: string[]
     reputation?: number
+    country?: string
+    as_owner?: string
+    rdap?: { name?: string }
+    total_votes?: { harmless: number; malicious: number }
+    crowdsourced_context?: Array<{
+      timestamp: number
+      details: string
+      title: string
+      severity: string
+      source: string
+    }>
   }
 }
 
@@ -72,36 +84,46 @@ export function formatVirusTotalResult(result: VirusTotalResult | null, indicato
   if (!result) return null
 
   const stats = result.attributes.last_analysis_stats
-  const totalDetections = stats.malicious + stats.suspicious + stats.undetected + stats.harmless
-  const detectionRatio = totalDetections > 0 ? ((stats.malicious + stats.suspicious) / totalDetections) * 100 : 0
-
   let status = 'clean'
   if (stats.malicious > 0) status = 'malicious'
   else if (stats.suspicious > 0) status = 'suspicious'
 
-  // Safe date handling - check if last_analysis_date exists and is valid
-  let lastAnalysisDate = 'N/A'
+  let lastAnalysisDate: string | null = null
   if (result.attributes.last_analysis_date && typeof result.attributes.last_analysis_date === 'number') {
     try {
       lastAnalysisDate = new Date(result.attributes.last_analysis_date * 1000).toISOString()
-    } catch (error) {
-      console.error('Error parsing VirusTotal date:', error)
-      lastAnalysisDate = 'N/A'
+    } catch {
+      lastAnalysisDate = null
     }
   }
 
+  const crowdsourced_context = result.attributes.crowdsourced_context?.map((ctx) => ({
+    timestamp: ctx.timestamp ? new Date(ctx.timestamp * 1000).toISOString() : null,
+    details: ctx.details ?? null,
+    title: ctx.title ?? null,
+    severity: ctx.severity ?? null,
+    source: ctx.source ?? null,
+  })) ?? null
+
   return {
     source: 'VirusTotal',
-    indicator: indicator,
-    type: result.type,
-    status: status,
-    malicious: stats.malicious,
-    suspicious: stats.suspicious,
-    undetected: stats.undetected,
-    harmless: stats.harmless,
-    detection_ratio: detectionRatio.toFixed(2),
+    indicator,
+    status,
+    id: result.id ?? null,
+    last_analysis_stats: {
+      malicious: stats.malicious ?? null,
+      suspicious: stats.suspicious ?? null,
+      undetected: stats.undetected ?? null,
+      harmless: stats.harmless ?? null,
+      timeout: stats.timeout ?? null,
+    },
+    rdap_name: result.attributes.rdap?.name ?? null,
+    country: result.attributes.country ?? null,
+    as_owner: result.attributes.as_owner ?? null,
+    total_votes: result.attributes.total_votes ?? null,
+    reputation: result.attributes.reputation ?? null,
+    tags: result.attributes.tags ?? null,
+    crowdsourced_context,
     last_analysis_date: lastAnalysisDate,
-    reputation: result.attributes.reputation || 0,
-    tags: result.attributes.tags || []
   }
 }

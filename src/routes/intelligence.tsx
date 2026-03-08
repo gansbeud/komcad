@@ -15,6 +15,7 @@ intelligence.post('/api/check', async (c) => {
       .filter((i) => i.length > 0)
     const source = String(formData.get('source') || 'AbuseIPDB')
     const mode = String(formData.get('mode') || 'Single Mode')
+    const maxAgeInDays = Math.max(1, Math.min(365, parseInt(String(formData.get('maxAgeInDays') || '180'), 10) || 180))
 
     if (indicators.length === 0) {
       return c.html(
@@ -42,7 +43,7 @@ intelligence.post('/api/check', async (c) => {
         let result: any = null
         switch (source) {
           case 'AbuseIPDB':
-            result = formatAbuseIPDBResult(await checkAbuseIPDB(trimmed))
+            result = formatAbuseIPDBResult(await checkAbuseIPDB(trimmed, maxAgeInDays))
             break
           case 'VirusTotal':
             result = formatVirusTotalResult(await checkVirusTotal(trimmed), trimmed)
@@ -62,109 +63,241 @@ intelligence.post('/api/check', async (c) => {
       }
     }
 
-    const statusBadge = (r: (typeof results)[0]) => {
-      if (r.error) return <span class="badge badge-error badge-sm">Error</span>
-      if (!r.result) return <span class="badge badge-outline badge-sm">Not Found</span>
-      const color =
-        r.result.status === 'malicious'
-          ? 'badge-error'
-          : r.result.status === 'suspicious'
-            ? 'badge-warning'
-            : 'badge-success'
-      return <span class={`badge badge-sm ${color}`}>{r.result.status ?? 'Unknown'}</span>
-    }
+    // Jakarta time (WIB = UTC+7)
+    const submittedAt =
+      new Date().toLocaleString('en-GB', {
+        timeZone: 'Asia/Jakarta',
+        day: '2-digit',
+        month: 'short',
+        year: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit',
+        hour12: false,
+      }) + ' WIB'
 
-    const summaryCell = (r: (typeof results)[0]) => {
-      if (r.error) return <span class="text-error text-xs">{r.error}</span>
-      if (!r.result) return null
-      return (
-        <div class="space-y-1 text-xs">
-          {source === 'AbuseIPDB' && r.result.risk_score !== undefined && (
-            <p>
-              Risk Score: <span class="font-semibold">{r.result.risk_score}%</span>
-            </p>
-          )}
-          {source === 'VirusTotal' && r.result.malicious !== undefined && (
-            <p>
-              Detections:{' '}
-              <span class="font-semibold">
-                {r.result.malicious + r.result.suspicious}/
-                {r.result.malicious + r.result.suspicious + r.result.undetected + r.result.harmless}
-              </span>
-            </p>
-          )}
-          {source === 'OTX Alienvault' && r.result.pulse_count !== undefined && (
-            <p>
-              Pulses: <span class="font-semibold">{r.result.pulse_count}</span>
-            </p>
-          )}
-          {r.result.reputation !== undefined && (
-            <p>
-              Reputation: <span class="font-semibold">{r.result.reputation}</span>
-            </p>
-          )}
-        </div>
-      )
-    }
+    // Audit API URL
+    const apiUrl =
+      source === 'AbuseIPDB'
+        ? `https://api.abuseipdb.com/api/v2/check?maxAgeInDays=${maxAgeInDays}&verbose=1`
+        : source === 'VirusTotal'
+          ? 'https://www.virustotal.com/api/v3/{type}/{indicator}'
+          : 'https://otx.alienvault.com/api/v1/indicators/IPv4/{indicator}/general'
+
+    // Null-safe cell helpers
+    const v = (val: any) => (val !== null && val !== undefined ? String(val) : '-')
+    const bv = (val: any) => (val === null || val === undefined ? '-' : val ? 'Yes' : 'No')
+
+    const renderAbuseIPDBTable = () => (
+      <table class="table table-xs table-zebra w-full" id="resultsTable">
+        <thead>
+          <tr class="border-base-300">
+            <th>IP Address</th>
+            <th>Whitelisted</th>
+            <th>Tor</th>
+            <th>Abuse Score</th>
+            <th>Reports</th>
+            <th>Country</th>
+            <th>Country Name</th>
+            <th>ISP</th>
+            <th>Domain</th>
+            <th>Hostnames</th>
+            <th>Usage Type</th>
+            <th>Last Reported</th>
+          </tr>
+        </thead>
+        <tbody>
+          {results.map((r, idx) => {
+            if (r.error) {
+              return (
+                <tr key={idx} class="hover:bg-base-200/50">
+                  <td class="font-mono text-xs">{r.indicator}</td>
+                  <td colSpan={11} class="text-error text-xs">{r.error}</td>
+                </tr>
+              )
+            }
+            if (!r.result) {
+              return (
+                <tr key={idx} class="hover:bg-base-200/50">
+                  <td class="font-mono text-xs">{r.indicator}</td>
+                  <td colSpan={11} class="text-base-content/50 text-xs italic">Not found / unsupported indicator type</td>
+                </tr>
+              )
+            }
+            const d = r.result
+            const sc = (d.abuseConfidenceScore ?? 0) > 75 ? 'text-error font-bold' : (d.abuseConfidenceScore ?? 0) > 25 ? 'text-warning font-semibold' : 'text-success'
+            return (
+              <tr key={idx} class="hover:bg-base-200/50">
+                <td class="font-mono text-xs">{v(d.ipAddress)}</td>
+                <td class="text-xs">{bv(d.isWhitelisted)}</td>
+                <td class="text-xs">{bv(d.isTor)}</td>
+                <td class={`text-xs ${sc}`}>{v(d.abuseConfidenceScore)}</td>
+                <td class="text-xs">{v(d.totalReports)}</td>
+                <td class="text-xs">{v(d.countryCode)}</td>
+                <td class="text-xs">{v(d.countryName)}</td>
+                <td class="text-xs truncate max-w-40" title={v(d.isp)}>{v(d.isp)}</td>
+                <td class="text-xs">{v(d.domain)}</td>
+                <td class="text-xs truncate max-w-32" title={(d.hostnames ?? []).join(', ')}>
+                  {(d.hostnames ?? []).length > 0 ? (d.hostnames as string[]).join(', ') : '-'}
+                </td>
+                <td class="text-xs">{v(d.usageType)}</td>
+                <td class="text-xs whitespace-nowrap">{v(d.lastReportedAt)}</td>
+              </tr>
+            )
+          })}
+        </tbody>
+      </table>
+    )
+
+    const renderVirusTotalTable = () => (
+      <table class="table table-xs table-zebra w-full" id="resultsTable">
+        <thead>
+          <tr class="border-base-300">
+            <th>ID</th>
+            <th>Malicious</th>
+            <th>Suspicious</th>
+            <th>Undetected</th>
+            <th>Harmless</th>
+            <th>Timeout</th>
+            <th>RDAP Name</th>
+            <th>Country</th>
+            <th>AS Owner</th>
+            <th>Votes ✓</th>
+            <th>Votes ✗</th>
+            <th>Reputation</th>
+            <th>Tags</th>
+            <th>Crowdsourced Context</th>
+            <th>Last Analysis</th>
+          </tr>
+        </thead>
+        <tbody>
+          {results.map((r, idx) => {
+            if (r.error) {
+              return (
+                <tr key={idx} class="hover:bg-base-200/50">
+                  <td class="font-mono text-xs">{r.indicator}</td>
+                  <td colSpan={14} class="text-error text-xs">{r.error}</td>
+                </tr>
+              )
+            }
+            if (!r.result) {
+              return (
+                <tr key={idx} class="hover:bg-base-200/50">
+                  <td class="font-mono text-xs">{r.indicator}</td>
+                  <td colSpan={14} class="text-base-content/50 text-xs italic">Not found / unsupported indicator type</td>
+                </tr>
+              )
+            }
+            const d = r.result
+            const st = d.last_analysis_stats ?? {}
+            const malColor = (st.malicious ?? 0) > 0 ? 'text-error font-bold' : ''
+            const susColor = (st.suspicious ?? 0) > 0 ? 'text-warning font-semibold' : ''
+            const ctxSummary =
+              Array.isArray(d.crowdsourced_context) && d.crowdsourced_context.length > 0
+                ? d.crowdsourced_context
+                    .map((cx: any) => `[${v(cx.severity)}] ${v(cx.title)}: ${v(cx.details)} (${v(cx.source)})`)
+                    .join(' | ')
+                : '-'
+            return (
+              <tr key={idx} class="hover:bg-base-200/50">
+                <td class="font-mono text-xs">{v(d.id)}</td>
+                <td class={`text-xs ${malColor}`}>{v(st.malicious)}</td>
+                <td class={`text-xs ${susColor}`}>{v(st.suspicious)}</td>
+                <td class="text-xs">{v(st.undetected)}</td>
+                <td class="text-xs">{v(st.harmless)}</td>
+                <td class="text-xs">{v(st.timeout)}</td>
+                <td class="text-xs">{v(d.rdap_name)}</td>
+                <td class="text-xs">{v(d.country)}</td>
+                <td class="text-xs truncate max-w-32" title={v(d.as_owner)}>{v(d.as_owner)}</td>
+                <td class="text-xs text-success">{d.total_votes ? v(d.total_votes.harmless) : '-'}</td>
+                <td class="text-xs text-error">{d.total_votes ? v(d.total_votes.malicious) : '-'}</td>
+                <td class={`text-xs ${(d.reputation ?? 0) < 0 ? 'text-error' : 'text-success'}`}>{v(d.reputation)}</td>
+                <td class="text-xs truncate max-w-24" title={Array.isArray(d.tags) ? (d.tags as string[]).join(', ') : '-'}>
+                  {Array.isArray(d.tags) && d.tags.length > 0 ? (d.tags as string[]).join(', ') : '-'}
+                </td>
+                <td class="text-xs truncate max-w-48" title={ctxSummary}>{ctxSummary}</td>
+                <td class="text-xs whitespace-nowrap">{v(d.last_analysis_date)}</td>
+              </tr>
+            )
+          })}
+        </tbody>
+      </table>
+    )
+
+    const renderGenericTable = () => (
+      <table class="table table-xs table-zebra w-full" id="resultsTable">
+        <thead>
+          <tr class="border-base-300">
+            <th>Indicator</th>
+            <th>Status</th>
+            <th>Details</th>
+          </tr>
+        </thead>
+        <tbody>
+          {results.map((r, idx) => {
+            const statusColor =
+              r.result?.status === 'malicious'
+                ? 'badge-error'
+                : r.result?.status === 'suspicious'
+                  ? 'badge-warning'
+                  : 'badge-success'
+            return (
+              <tr key={idx} class="hover:bg-base-200/50">
+                <td class="font-mono text-xs">{r.indicator}</td>
+                <td>
+                  {r.error ? (
+                    <span class="badge badge-error badge-sm">Error</span>
+                  ) : r.result ? (
+                    <span class={`badge badge-sm ${statusColor}`}>{r.result.status ?? 'Unknown'}</span>
+                  ) : (
+                    <span class="badge badge-outline badge-sm">Not Found</span>
+                  )}
+                </td>
+                <td class="text-xs">{r.error ?? JSON.stringify(r.result ?? {})}</td>
+              </tr>
+            )
+          })}
+        </tbody>
+      </table>
+    )
 
     return c.html(
       <div class="space-y-4">
         <p class="text-sm text-base-content/60">
           Mode: <span class="font-semibold">{mode}</span> | Source:{' '}
           <span class="font-semibold">{source}</span> | Total:{' '}
-          <span class="font-semibold">{indicators.length}</span>
+          <span class="font-semibold">{results.length}</span>
         </p>
 
-        <div class="overflow-x-auto">
-          <table class="table table-sm table-zebra w-full">
-            <thead>
-              <tr class="border-base-300">
-                <th>Indicator</th>
-                <th>Status</th>
-                <th>Summary</th>
-                <th>Action</th>
-              </tr>
-            </thead>
-            <tbody>
-              {results.map((r, idx) => (
-                <tr key={idx} class="hover:bg-base-200/50 transition-colors">
-                  <td
-                    class="font-mono text-xs truncate max-w-xs"
-                    title={r.indicator}
-                  >
-                    {r.indicator}
-                  </td>
-                  <td>{statusBadge(r)}</td>
-                  <td>{summaryCell(r)}</td>
-                  <td>
-                    <button
-                      class="btn btn-ghost btn-xs detailsBtn"
-                      data-idx={String(idx)}
-                    >
-                      Details
-                    </button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+        <div class="overflow-x-auto rounded-lg border border-base-300">
+          {source === 'AbuseIPDB'
+            ? renderAbuseIPDBTable()
+            : source === 'VirusTotal'
+              ? renderVirusTotalTable()
+              : renderGenericTable()}
         </div>
 
-        <div class="flex gap-2">
-          <button class="btn btn-sm btn-outline" id="newCheckBtn">
-            New Check
-          </button>
-          <button class="btn btn-sm btn-outline" id="copyJsonBtn">
-            Copy JSON
-          </button>
+        {/* Action Buttons */}
+        <div class="flex flex-wrap gap-2">
+          <button class="btn btn-sm btn-outline" id="newCheckBtn">↩ New Check</button>
+          <button class="btn btn-sm btn-outline" id="copyTableBtn">📋 Copy to Clipboard</button>
+          <button class="btn btn-sm btn-outline" id="exportCsvBtn">⬇ Export to CSV</button>
+          <button class="btn btn-sm btn-outline" id="copyPtmBtn">🔗 Copy PTM Format</button>
         </div>
 
-        {/* Hidden payload for copy-JSON — stored in a script tag to avoid HTML attribute encoding issues */}
+        {/* Audit Information */}
+        <div class="border border-base-300 rounded-lg p-3 bg-base-200/50 text-xs space-y-1 text-base-content/70">
+          <p class="font-semibold text-base-content/90 mb-1">Audit Information</p>
+          <p>Date Submitted: <span class="font-mono">{submittedAt}</span></p>
+          <p>API Endpoint: <span class="font-mono break-all">{apiUrl}</span></p>
+        </div>
+
+        {/* Hidden JSON payload for client-side button actions */}
         <script
           id="resultsData"
           type="application/json"
           dangerouslySetInnerHTML={{
-            __html: JSON.stringify({ mode, source, results }).replace(/<\/script/gi, '<\/script'),
+            __html: JSON.stringify({ mode, source, maxAgeInDays, results }).replace(/<\/script/gi, '<\/script'),
           }}
         />
       </div>
@@ -270,6 +403,24 @@ intelligence.get('/', (c) => {
               <p class="text-xs text-base-content/60 mt-1">More sources coming soon</p>
             </div>
 
+            {/* MAX AGE IN DAYS — only visible for AbuseIPDB */}
+            <div id="maxAgeContainer" class="mb-5">
+              <label class="label pb-1">
+                <span class="label-text font-semibold">Max Age In Days</span>
+                <span class="text-xs text-base-content/60">AbuseIPDB report history window</span>
+              </label>
+              <input
+                type="number"
+                name="maxAgeInDays"
+                id="maxAgeInput"
+                min="1"
+                max="365"
+                value="180"
+                class="input input-bordered input-sm w-40"
+              />
+              <p class="text-xs text-base-content/60 mt-1">Range: 1–365 days (default 180)</p>
+            </div>
+
             {/* INDICATORS INPUT */}
             <textarea
               name="indicators"
@@ -370,6 +521,7 @@ intelligence.get('/', (c) => {
         dangerouslySetInnerHTML={{
           __html: `
 (function () {
+  // ── Mode buttons ────────────────────────────────────────────────────────────
   function setMode(mode) {
     document.getElementById('modeInput').value = mode;
     document.querySelectorAll('.modeBtn').forEach(function (btn) {
@@ -390,48 +542,126 @@ intelligence.get('/', (c) => {
 
   document.getElementById('indicatorsInput').addEventListener('input', updateModeFromInput);
 
+  // ── MaxAge visibility (only for AbuseIPDB) ──────────────────────────────────
+  function updateMaxAgeVisibility() {
+    var source = document.querySelector('input[name="source"]:checked');
+    var container = document.getElementById('maxAgeContainer');
+    if (container) {
+      container.style.display = (source && source.value === 'AbuseIPDB') ? '' : 'none';
+    }
+  }
+
+  document.querySelectorAll('input[name="source"]').forEach(function (radio) {
+    radio.addEventListener('change', updateMaxAgeVisibility);
+  });
+  updateMaxAgeVisibility();
+
+  // ── Form submit ──────────────────────────────────────────────────────────────
   async function handleFormSubmit(event) {
     event.preventDefault();
     var resultsArea = document.getElementById('resultsArea');
     resultsArea.innerHTML = '<div class="flex justify-center py-6"><span class="loading loading-spinner loading-lg"></span></div>';
-
     try {
       var response = await fetch('/intelligence/api/check', { method: 'POST', body: new FormData(event.target) });
       var html = await response.text();
       resultsArea.innerHTML = html;
-
-      resultsArea.querySelectorAll('.detailsBtn').forEach(function (btn) {
-        btn.addEventListener('click', function () {
-          alert('Details for result #' + (parseInt(this.getAttribute('data-idx')) + 1) + ' - Full details view coming soon!');
-        });
-      });
-
-      var newCheckBtn = resultsArea.querySelector('#newCheckBtn');
-      if (newCheckBtn) {
-        newCheckBtn.addEventListener('click', function () {
-          resultsArea.innerHTML = '<div class="alert alert-info alert-soft"><span>Ready for new check</span></div>';
-          var inp = document.getElementById('indicatorsInput');
-          inp.value = '';
-          inp.focus();
-        });
-      }
-
-      var copyJsonBtn = resultsArea.querySelector('#copyJsonBtn');
-      if (copyJsonBtn) {
-        copyJsonBtn.addEventListener('click', function () {
-          var el = resultsArea.querySelector('#resultsData');
-          if (el) {
-            try { navigator.clipboard.writeText(JSON.stringify(JSON.parse(el.textContent || '{}'), null, 2)); }
-            catch (e) { console.error('Copy failed', e); }
-          }
-        });
-      }
+      attachResultHandlers();
     } catch (err) {
       resultsArea.innerHTML = '<div class="alert alert-error alert-soft"><span>Error: ' + err.message + '</span></div>';
     }
   }
 
   document.getElementById('checkForm').addEventListener('submit', handleFormSubmit);
+
+  // ── Post-render button handlers ──────────────────────────────────────────────
+  function attachResultHandlers() {
+    var resultsArea = document.getElementById('resultsArea');
+
+    var newCheckBtn = resultsArea.querySelector('#newCheckBtn');
+    if (newCheckBtn) {
+      newCheckBtn.addEventListener('click', function () {
+        resultsArea.innerHTML = '<div class="alert alert-info alert-soft"><span>Ready for new check</span></div>';
+        var inp = document.getElementById('indicatorsInput');
+        inp.value = '';
+        inp.focus();
+      });
+    }
+
+    // Copy table as TSV to clipboard
+    var copyTableBtn = resultsArea.querySelector('#copyTableBtn');
+    if (copyTableBtn) {
+      copyTableBtn.addEventListener('click', function () {
+        var table = resultsArea.querySelector('#resultsTable');
+        if (!table) return;
+        var rows = Array.from(table.querySelectorAll('tr'));
+        var tsv = rows.map(function (row) {
+          return Array.from(row.querySelectorAll('th,td')).map(function (cell) {
+            return (cell.getAttribute('title') || cell.textContent || '').trim();
+          }).join('\\t');
+        }).join('\\n');
+        navigator.clipboard.writeText(tsv).then(function () {
+          copyTableBtn.textContent = '\\u2713 Copied!';
+          setTimeout(function () { copyTableBtn.textContent = '\\uD83D\\uDCCB Copy to Clipboard'; }, 2000);
+        }).catch(function (e) { console.error('Copy failed', e); });
+      });
+    }
+
+    // Export table as CSV download
+    var exportCsvBtn = resultsArea.querySelector('#exportCsvBtn');
+    if (exportCsvBtn) {
+      exportCsvBtn.addEventListener('click', function () {
+        var table = resultsArea.querySelector('#resultsTable');
+        if (!table) return;
+        var rows = Array.from(table.querySelectorAll('tr'));
+        var csv = rows.map(function (row) {
+          return Array.from(row.querySelectorAll('th,td')).map(function (cell) {
+            var text = ((cell.getAttribute('title') || cell.textContent || '').trim()).replace(/"/g, '""');
+            return '"' + text + '"';
+          }).join(',');
+        }).join('\\n');
+        var blob = new Blob(['\\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' });
+        var url = URL.createObjectURL(blob);
+        var a = document.createElement('a');
+        a.href = url;
+        a.download = 'intel_results_' + new Date().toISOString().slice(0, 10) + '.csv';
+        a.click();
+        URL.revokeObjectURL(url);
+      });
+    }
+
+    // Copy PTM format: (IP (Hostname,countryCode), ...
+    var copyPtmBtn = resultsArea.querySelector('#copyPtmBtn');
+    if (copyPtmBtn) {
+      copyPtmBtn.addEventListener('click', function () {
+        var el = resultsArea.querySelector('#resultsData');
+        if (!el) return;
+        try {
+          var data = JSON.parse(el.textContent || '{}');
+          var src = data.source;
+          var entries = (data.results || []).map(function (r) {
+            if (!r.result) return null;
+            var ip = '', hostname = '', cc = '';
+            if (src === 'AbuseIPDB') {
+              ip = r.result.ipAddress || r.indicator;
+              hostname = (r.result.hostnames && r.result.hostnames[0]) || r.result.domain || '-';
+              cc = r.result.countryCode || '-';
+            } else if (src === 'VirusTotal') {
+              ip = r.result.id || r.indicator;
+              hostname = r.result.rdap_name || '-';
+              cc = r.result.country || '-';
+            } else {
+              ip = r.indicator; hostname = '-'; cc = '-';
+            }
+            return '(' + ip + ' (' + hostname + ',' + cc + ')';
+          }).filter(Boolean);
+          navigator.clipboard.writeText(' ' + entries.join(', ')).then(function () {
+            copyPtmBtn.textContent = '\\u2713 Copied PTM!';
+            setTimeout(function () { copyPtmBtn.textContent = '\\uD83D\\uDD17 Copy PTM Format'; }, 2000);
+          });
+        } catch (e) { console.error('PTM copy failed', e); }
+      });
+    }
+  }
 })();
           `,
         }}

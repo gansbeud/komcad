@@ -1,17 +1,20 @@
 interface AbuseIPDBResult {
   ipAddress: string
+  isWhitelisted: boolean | null
+  isTor: boolean | null
   abuseConfidenceScore: number
   countryCode: string
-  usageType: string
-  isp: string
-  domain: string
+  countryName: string | null
+  usageType: string | null
+  isp: string | null
+  domain: string | null
   hostnames: string[]
   totalReports: number
   numDistinctUsers: number
-  lastReportedAt: string
+  lastReportedAt: string | null
 }
 
-export async function checkAbuseIPDB(indicator: string): Promise<AbuseIPDBResult | null> {
+export async function checkAbuseIPDB(indicator: string, maxAgeInDays: number = 180): Promise<AbuseIPDBResult | null> {
   const apiKey = process.env.ABUSEIPDB_API_KEY
   if (!apiKey) {
     throw new Error('ABUSEIPDB_API_KEY not configured')
@@ -26,7 +29,7 @@ export async function checkAbuseIPDB(indicator: string): Promise<AbuseIPDBResult
   try {
     const params = new URLSearchParams()
     params.append('ipAddress', indicator)
-    params.append('maxAgeInDays', '90')
+    params.append('maxAgeInDays', String(maxAgeInDays))
     params.append('verbose', '1')
 
     const response = await fetch(`https://api.abuseipdb.com/api/v2/check?${params.toString()}`, {
@@ -55,13 +58,19 @@ export function formatAbuseIPDBResult(result: AbuseIPDBResult | null) {
   return {
     source: 'AbuseIPDB',
     indicator: result.ipAddress,
-    risk_score: result.abuseConfidenceScore,
     status: result.abuseConfidenceScore > 75 ? 'malicious' : result.abuseConfidenceScore > 25 ? 'suspicious' : 'clean',
-    reports: result.totalReports,
-    distinct_users: result.numDistinctUsers,
-    last_reported: result.lastReportedAt,
-    country: result.countryCode,
-    isp: result.isp,
-    domain: result.domain
+    // Full detailed fields
+    ipAddress: result.ipAddress ?? null,
+    isWhitelisted: result.isWhitelisted ?? null,
+    isTor: result.isTor ?? null,
+    abuseConfidenceScore: result.abuseConfidenceScore ?? null,
+    totalReports: result.totalReports ?? null,
+    countryCode: result.countryCode ?? null,
+    countryName: result.countryName ?? null,
+    isp: result.isp ?? null,
+    domain: result.domain ?? null,
+    hostnames: result.hostnames ?? [],
+    usageType: result.usageType ?? null,
+    lastReportedAt: result.lastReportedAt ?? null,
   }
 }
