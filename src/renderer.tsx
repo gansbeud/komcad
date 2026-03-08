@@ -30,8 +30,8 @@ export const renderer = jsxRenderer(({ children, title }: any) => {
               <div class="flex-1 px-4">
                 <div class="breadcrumbs text-sm">
                   <ul>
-                    <li><a class="link link-hover">Home</a></li>
-                    <li><a class="link link-hover">Dashboard</a></li>
+                    <li><a href="/" class="link link-hover">Home</a></li>
+                    <li><a href="/" class="link link-hover">Dashboard</a></li>
                     <li><span class="text-primary font-semibold">{title ?? "Overview"}</span></li>
                   </ul>
                 </div>
@@ -181,138 +181,76 @@ export const renderer = jsxRenderer(({ children, title }: any) => {
 
               {/* SIDEBAR MENU - SCROLLABLE */}
               <div class="flex-1 overflow-y-auto">
-                <ul class="menu w-full px-2 py-1 gap-0.5 text-sm">
-
-                  <li class="menu-title text-xs font-bold opacity-60 py-1">
-                    <span>MAIN</span>
-                  </li>
+                <ul class="menu w-full px-3 py-2 gap-2 text-sm">
 
                   <li>
-                    <a class="active">
-                      <span>📊</span>
-                      Dashboard
-                    </a>
-                  </li>
-
-                  <li class="menu-title text-xs font-bold opacity-60 py-1">
-                    <span>INTELLIGENCE</span>
-                  </li>
-
-                  <li>
-                    <details open>
-                      <summary>
-                        <span>🎯</span>
-                        Threat Detection
-                      </summary>
-                      <ul>
-                        <li><a class="text-sm">Active Threats</a></li>
-                        <li><a class="text-sm">Threat Timeline</a></li>
-                        <li><a class="text-sm">Blocked Attacks</a></li>
-                        <li><a class="text-sm">Indicators</a></li>
-                      </ul>
-                    </details>
-                  </li>
-
-                  <li>
-                    <details>
-                      <summary>
-                        <span>🛡️</span>
-                        Vulnerabilities
-                      </summary>
-                      <ul>
-                        <li><a class="text-sm">Critical</a></li>
-                        <li><a class="text-sm">High</a></li>
-                        <li><a class="text-sm">Medium</a></li>
-                        <li><a class="text-sm">Scan Results</a></li>
-                      </ul>
-                    </details>
-                  </li>
-
-                  <li>
-                    <details>
-                      <summary>
-                        <span>🌐</span>
-                        Network Recon
-                      </summary>
-                      <ul>
-                        <li><a class="text-sm">Whois Lookup</a></li>
-                        <li><a class="text-sm">Port Scanning</a></li>
-                        <li><a class="text-sm">DNS Resolution</a></li>
-                        <li><a class="text-sm">IP Intel</a></li>
-                      </ul>
-                    </details>
-                  </li>
-
-                  <li class="menu-title text-xs font-bold opacity-60 py-1">
-                    <span>TOOLS</span>
-                  </li>
-
-                  <li>
-                    <a>
-                      <span>📡</span>
-                      HTTP Proxy
-                      <span class="badge badge-xs badge-success">Live</span>
+                    <a href="/" class="h-12 active hover:bg-primary/20">
+                      <span class="text-xl">📊</span>
+                      <span class="text-base font-semibold">Dashboard</span>
                     </a>
                   </li>
 
                   <li>
-                    <a>
-                      <span>🧩</span>
-                      MISP Integration
+                    <a href="/intelligence" class="h-12 hover:bg-primary/20">
+                      <span class="text-xl">🔍</span>
+                      <span class="text-base font-semibold">Intelligence</span>
                     </a>
                   </li>
 
-                  <li class="menu-title text-xs font-bold opacity-60 py-1">
-                    <span>MANAGEMENT</span>
-                  </li>
-
-                  <li>
-                    <details>
-                      <summary>
-                        <span>📋</span>
-                        Reports
-                      </summary>
-                      <ul>
-                        <li><a class="text-sm">Daily Summary</a></li>
-                        <li><a class="text-sm">Weekly Report</a></li>
-                        <li><a class="text-sm">Custom Report</a></li>
-                        <li><a class="text-sm">Export</a></li>
-                      </ul>
-                    </details>
-                  </li>
-
-                  <li>
-                    <a>
-                      <span>📜</span>
-                      Audit Log
+                  <li class="menu-disabled opacity-60 cursor-not-allowed">
+                    <a class="h-12">
+                      <span class="text-xl">🌐</span>
+                      <span class="text-base font-semibold">Whois</span>
                     </a>
                   </li>
 
-                  <li>
-                    <a>
-                      <span>⚕️</span>
-                      Health Check
-                      <span class="badge badge-xs badge-success">OK</span>
+                  <li class="menu-disabled opacity-60 cursor-not-allowed">
+                    <a class="h-12">
+                      <span class="text-xl">🔎</span>
+                      <span class="text-base font-semibold">NMAP / RustScan</span>
                     </a>
                   </li>
 
-                  <li class="menu-title text-xs font-bold opacity-60 py-1">
-                    <span>SYSTEM</span>
+                  <li class="menu-disabled opacity-60 cursor-not-allowed">
+                    <a class="h-12">
+                      <span class="text-xl">📡</span>
+                      <span class="text-base font-semibold">HTTP Proxy</span>
+                    </a>
                   </li>
 
-                  <li>
-                    <details>
-                      <summary>
-                        <span>⚙️</span>
-                        Configuration
-                      </summary>
-                      <ul>
-                        <li><a class="text-sm">General Settings</a></li>
-                        <li><a class="text-sm">Security</a></li>
-                        <li><a class="text-sm">Integrations</a></li>
-                        <li><a class="text-sm">API Keys</a></li>
-                      </ul>
-                    </details>
+                  <li class="menu-disabled opacity-60 cursor-not-allowed">
+                    <a class="h-12">
+                      <span class="text-xl">🧩</span>
+                      <span class="text-base font-semibold">MISP</span>
+                    </a>
+                  </li>
+
+                  <li class="menu-disabled opacity-60 cursor-not-allowed">
+                    <a class="h-12">
+                      <span class="text-xl">📋</span>
+                      <span class="text-base font-semibold">Report Utility</span>
+                    </a>
+                  </li>
+
+                  <li class="menu-disabled opacity-60 cursor-not-allowed">
+                    <a class="h-12">
+                      <span class="text-xl">📜</span>
+                      <span class="text-base font-semibold">Audit Log</span>
+                    </a>
+                  </li>
+
+                  <li class="menu-disabled opacity-60 cursor-not-allowed">
+                    <a class="h-12">
+                      <span class="text-xl">⚕️</span>
+                      <span class="text-base font-semibold">Health</span>
+                    </a>
+                  </li>
+
+                  <li class="menu-disabled opacity-60 cursor-not-allowed">
+                    <a class="h-12">
+                      <span class="text-xl">⚙️</span>
+                      <span class="text-base font-semibold">Configuration</span>
+                    </a>
                   </li>
 
                 </ul>

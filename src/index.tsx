@@ -307,5 +307,9 @@ app.get('/', (c) => {
     </div>
   )
 })
+import intelligenceRoutes from './routes/intelligence'
+
+// Mount intelligence routes
+app.route('/intelligence', intelligenceRoutes)
 
 export default app
