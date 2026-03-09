@@ -87,6 +87,26 @@ intelligence.post('/api/check', async (c) => {
     // Null-safe cell helpers
     const v = (val: any) => (val !== null && val !== undefined ? String(val) : '-')
     const bv = (val: any) => (val === null || val === undefined ? '-' : val ? 'Yes' : 'No')
+    const toJakartaTime = (dateStr: string | null | undefined): string => {
+      if (!dateStr) return '-'
+      try {
+        const date = new Date(dateStr)
+        if (isNaN(date.getTime())) return String(dateStr)
+        return date.toLocaleString('en-GB', {
+          timeZone: 'Asia/Jakarta', day: '2-digit', month: 'short', year: 'numeric',
+          hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false,
+        }) + ' WIB'
+      } catch { return String(dateStr) }
+    }
+    const unixToJakartaTime = (ts: number | null | undefined): string => {
+      if (!ts) return '-'
+      try {
+        return new Date(ts * 1000).toLocaleString('en-GB', {
+          timeZone: 'Asia/Jakarta', day: '2-digit', month: 'short', year: 'numeric',
+          hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false,
+        }) + ' WIB'
+      } catch { return '-' }
+    }
 
     const renderAbuseIPDBTable = () => (
       <table class="table table-xs table-zebra w-full" id="resultsTable">
@@ -125,13 +145,14 @@ intelligence.post('/api/check', async (c) => {
               )
             }
             const d = r.result
-            const sc = (d.abuseConfidenceScore ?? 0) > 75 ? 'text-error font-bold' : (d.abuseConfidenceScore ?? 0) > 25 ? 'text-warning font-semibold' : 'text-success'
+            const abuseScore = d.abuseConfidenceScore ?? 0
+            const abuseBadge = abuseScore > 75 ? 'badge-error' : abuseScore > 25 ? 'badge-warning' : 'badge-success'
             return (
               <tr key={idx} class="hover:bg-base-200/50">
                 <td class="font-mono text-xs">{v(d.ipAddress)}</td>
                 <td class="text-xs">{bv(d.isWhitelisted)}</td>
                 <td class="text-xs">{bv(d.isTor)}</td>
-                <td class={`text-xs ${sc}`}>{v(d.abuseConfidenceScore)}</td>
+                <td><span class={`badge badge-sm ${abuseBadge}`}>{abuseScore}%</span></td>
                 <td class="text-xs">{v(d.totalReports)}</td>
                 <td class="text-xs">{v(d.countryCode)}</td>
                 <td class="text-xs">{v(d.countryName)}</td>
@@ -141,7 +162,7 @@ intelligence.post('/api/check', async (c) => {
                   {(d.hostnames ?? []).length > 0 ? (d.hostnames as string[]).join(', ') : '-'}
                 </td>
                 <td class="text-xs">{v(d.usageType)}</td>
-                <td class="text-xs whitespace-nowrap">{v(d.lastReportedAt)}</td>
+                <td class="text-xs whitespace-nowrap">{toJakartaTime(d.lastReportedAt)}</td>
               </tr>
             )
           })}
@@ -156,14 +177,12 @@ intelligence.post('/api/check', async (c) => {
             <th>ID</th>
             <th>Malicious</th>
             <th>Suspicious</th>
-            <th>Undetected</th>
             <th>Harmless</th>
-            <th>Timeout</th>
             <th>RDAP Name</th>
             <th>Country</th>
             <th>AS Owner</th>
-            <th>Votes ✓</th>
-            <th>Votes ✗</th>
+            <th>Votes (+)</th>
+            <th>Votes (-)</th>
             <th>Reputation</th>
             <th>Tags</th>
             <th>Crowdsourced Context</th>
@@ -176,7 +195,7 @@ intelligence.post('/api/check', async (c) => {
               return (
                 <tr key={idx} class="hover:bg-base-200/50">
                   <td class="font-mono text-xs">{r.indicator}</td>
-                  <td colSpan={14} class="text-error text-xs">{r.error}</td>
+                  <td colSpan={12} class="text-error text-xs">{r.error}</td>
                 </tr>
               )
             }
@@ -184,14 +203,12 @@ intelligence.post('/api/check', async (c) => {
               return (
                 <tr key={idx} class="hover:bg-base-200/50">
                   <td class="font-mono text-xs">{r.indicator}</td>
-                  <td colSpan={14} class="text-base-content/50 text-xs italic">Not found / unsupported indicator type</td>
+                  <td colSpan={12} class="text-base-content/50 text-xs italic">Not found / unsupported indicator type</td>
                 </tr>
               )
             }
             const d = r.result
             const st = d.last_analysis_stats ?? {}
-            const malColor = (st.malicious ?? 0) > 0 ? 'text-error font-bold' : ''
-            const susColor = (st.suspicious ?? 0) > 0 ? 'text-warning font-semibold' : ''
             const ctxSummary =
               Array.isArray(d.crowdsourced_context) && d.crowdsourced_context.length > 0
                 ? d.crowdsourced_context
@@ -201,22 +218,20 @@ intelligence.post('/api/check', async (c) => {
             return (
               <tr key={idx} class="hover:bg-base-200/50">
                 <td class="font-mono text-xs">{v(d.id)}</td>
-                <td class={`text-xs ${malColor}`}>{v(st.malicious)}</td>
-                <td class={`text-xs ${susColor}`}>{v(st.suspicious)}</td>
-                <td class="text-xs">{v(st.undetected)}</td>
-                <td class="text-xs">{v(st.harmless)}</td>
-                <td class="text-xs">{v(st.timeout)}</td>
+                <td><span class={`badge badge-sm ${ (st.malicious ?? 0) > 0 ? 'badge-error' : 'badge-outline'}`}>{st.malicious ?? 0}</span></td>
+                <td><span class={`badge badge-sm ${ (st.suspicious ?? 0) > 0 ? 'badge-warning' : 'badge-outline'}`}>{st.suspicious ?? 0}</span></td>
+                <td><span class={`badge badge-sm ${ (st.harmless ?? 0) > 0 ? 'badge-success' : 'badge-outline'}`}>{st.harmless ?? 0}</span></td>
                 <td class="text-xs">{v(d.rdap_name)}</td>
                 <td class="text-xs">{v(d.country)}</td>
                 <td class="text-xs truncate max-w-32" title={v(d.as_owner)}>{v(d.as_owner)}</td>
-                <td class="text-xs text-success">{d.total_votes ? v(d.total_votes.harmless) : '-'}</td>
-                <td class="text-xs text-error">{d.total_votes ? v(d.total_votes.malicious) : '-'}</td>
-                <td class={`text-xs ${(d.reputation ?? 0) < 0 ? 'text-error' : 'text-success'}`}>{v(d.reputation)}</td>
+                <td class="text-xs text-success font-semibold">{d.total_votes ? v(d.total_votes.harmless) : '-'}</td>
+                <td class="text-xs text-error font-semibold">{d.total_votes ? v(d.total_votes.malicious) : '-'}</td>
+                <td class={`text-xs font-semibold ${ (d.reputation ?? 0) < 0 ? 'text-error' : (d.reputation ?? 0) > 0 ? 'text-success' : 'text-base-content/60'}`}>{v(d.reputation)}</td>
                 <td class="text-xs truncate max-w-24" title={Array.isArray(d.tags) ? (d.tags as string[]).join(', ') : '-'}>
                   {Array.isArray(d.tags) && d.tags.length > 0 ? (d.tags as string[]).join(', ') : '-'}
                 </td>
                 <td class="text-xs truncate max-w-48" title={ctxSummary}>{ctxSummary}</td>
-                <td class="text-xs whitespace-nowrap">{v(d.last_analysis_date)}</td>
+                <td class="text-xs whitespace-nowrap">{unixToJakartaTime(d.last_analysis_date)}</td>
               </tr>
             )
           })}
@@ -224,36 +239,50 @@ intelligence.post('/api/check', async (c) => {
       </table>
     )
 
-    const renderGenericTable = () => (
+    const renderOTXTable = () => (
       <table class="table table-xs table-zebra w-full" id="resultsTable">
         <thead>
           <tr class="border-base-300">
             <th>Indicator</th>
             <th>Status</th>
-            <th>Details</th>
+            <th>Whitelisted</th>
+            <th>Reputation</th>
+            <th>Pulse Count</th>
+            <th>Pulse Names</th>
           </tr>
         </thead>
         <tbody>
           {results.map((r, idx) => {
-            const statusColor =
-              r.result?.status === 'malicious'
-                ? 'badge-error'
-                : r.result?.status === 'suspicious'
-                  ? 'badge-warning'
-                  : 'badge-success'
+            if (r.error) {
+              return (
+                <tr key={idx} class="hover:bg-base-200/50">
+                  <td class="font-mono text-xs">{r.indicator}</td>
+                  <td colSpan={5} class="text-error text-xs">{r.error}</td>
+                </tr>
+              )
+            }
+            if (!r.result) {
+              return (
+                <tr key={idx} class="hover:bg-base-200/50">
+                  <td class="font-mono text-xs">{r.indicator}</td>
+                  <td colSpan={5} class="text-base-content/50 text-xs italic">Not found / unsupported indicator type</td>
+                </tr>
+              )
+            }
+            const d = r.result
+            const statusColor = d.status === 'malicious' ? 'badge-error' : d.status === 'suspicious' ? 'badge-warning' : 'badge-success'
+            const repColor = (d.reputation ?? 0) < 0 ? 'text-error' : (d.reputation ?? 0) > 0 ? 'text-success' : 'text-base-content/60'
+            const pulseNamesList = Array.isArray(d.pulses) && d.pulses.length > 0
+              ? (d.pulses as Array<{ name: string }>).map(p => p.name).join(' · ')
+              : '-'
             return (
               <tr key={idx} class="hover:bg-base-200/50">
-                <td class="font-mono text-xs">{r.indicator}</td>
-                <td>
-                  {r.error ? (
-                    <span class="badge badge-error badge-sm">Error</span>
-                  ) : r.result ? (
-                    <span class={`badge badge-sm ${statusColor}`}>{r.result.status ?? 'Unknown'}</span>
-                  ) : (
-                    <span class="badge badge-outline badge-sm">Not Found</span>
-                  )}
-                </td>
-                <td class="text-xs">{r.error ?? JSON.stringify(r.result ?? {})}</td>
+                <td class="font-mono text-xs">{v(d.indicator)}</td>
+                <td><span class={`badge badge-sm ${statusColor}`}>{v(d.status)}</span></td>
+                <td class="text-xs">{bv(d.whitelisted)}</td>
+                <td class={`text-xs font-semibold ${repColor}`}>{v(d.reputation)}</td>
+                <td class="text-xs">{v(d.pulse_count)}</td>
+                <td class="text-xs max-w-72 truncate" title={pulseNamesList}>{pulseNamesList}</td>
               </tr>
             )
           })}
@@ -274,7 +303,14 @@ intelligence.post('/api/check', async (c) => {
             ? renderAbuseIPDBTable()
             : source === 'VirusTotal'
               ? renderVirusTotalTable()
-              : renderGenericTable()}
+              : renderOTXTable()}
+        </div>
+
+        {/* Audit Information */}
+        <div class="border border-base-300 rounded-lg p-3 bg-base-200/50 text-xs space-y-1 text-base-content/70">
+          <p class="font-semibold text-base-content/90 mb-1">Audit Information</p>
+          <p>Date Submitted: <span class="font-mono">{submittedAt}</span></p>
+          <p>API Endpoint: <span class="font-mono break-all">{apiUrl}</span></p>
         </div>
 
         {/* Action Buttons */}
@@ -283,13 +319,6 @@ intelligence.post('/api/check', async (c) => {
           <button class="btn btn-sm btn-outline" id="copyTableBtn">📋 Copy to Clipboard</button>
           <button class="btn btn-sm btn-outline" id="exportCsvBtn">⬇ Export to CSV</button>
           <button class="btn btn-sm btn-outline" id="copyPtmBtn">🔗 Copy PTM Format</button>
-        </div>
-
-        {/* Audit Information */}
-        <div class="border border-base-300 rounded-lg p-3 bg-base-200/50 text-xs space-y-1 text-base-content/70">
-          <p class="font-semibold text-base-content/90 mb-1">Audit Information</p>
-          <p>Date Submitted: <span class="font-mono">{submittedAt}</span></p>
-          <p>API Endpoint: <span class="font-mono break-all">{apiUrl}</span></p>
         </div>
 
         {/* Hidden JSON payload for client-side button actions */}
@@ -667,6 +696,8 @@ intelligence.get('/', (c) => {
         }}
       />
     </div>,
+    // @ts-expect-error — Hono ContextRenderer not extended; title is picked up by renderer.tsx
+    { title: 'Threat Intelligence' }
   )
 })
 

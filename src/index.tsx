@@ -64,40 +64,98 @@ app.get('/', (c) => {
               </div>
             </div>
             
-            <div class="h-72 bg-linear-to-b from-base-200 to-base-300 rounded-lg flex items-end justify-around p-6 gap-1 relative">
-              {/* GRID LINES */}
-              <div class="absolute inset-0 opacity-10 pointer-events-none">
-                {[...Array(5)].map((_, i) => (
-                  <div key={i} class="absolute left-0 right-0 border-t border-base-content" style={{top: `${i * 25}%`}} />
-                ))}
-              </div>
-              
-              {/* BARS WITH LABELS */}
-              {[35, 52, 28, 65, 48, 78, 60].map((height, i) => (
-                <div key={i} class="flex-1 flex flex-col items-center relative z-10">
-                  <div class="tooltip tooltip-top mb-2" data-tip={`${height} threats`}>
-                    <div class="w-full bg-linear-to-t from-error to-error/50 rounded-t hover:from-error/80 transition-all duration-200 cursor-pointer" 
-                         style={{height: `${height * 2}px`}} />
-                  </div>
-                  <span class="text-xs opacity-60 mt-2">{['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'][i]}</span>
-                </div>
-              ))}
+            {/* Triple-line chart: Malicious / Suspicious / Blocked — random data each page load */}
+            <div class="h-72 rounded-lg overflow-hidden bg-base-200 relative">
+              <canvas id="threatTimelineChart" style="width:100%;height:100%;display:block;"></canvas>
             </div>
-            
+
             <div class="stats stats-vertical md:stats-horizontal bg-base-200/50 mt-4 rounded-lg">
               <div class="stat">
-                <div class="stat-title text-xs">Average</div>
-                <div class="stat-value text-error text-2xl">35/hr</div>
+                <div class="stat-title text-xs">Avg Malicious/hr</div>
+                <div class="stat-value text-error text-2xl" id="tl-statAvg">—</div>
               </div>
               <div class="stat">
-                <div class="stat-title text-xs">Peak</div>
-                <div class="stat-value text-warning text-2xl">78</div>
+                <div class="stat-title text-xs">Peak Malicious</div>
+                <div class="stat-value text-warning text-2xl" id="tl-statPeak">—</div>
               </div>
               <div class="stat">
-                <div class="stat-title text-xs">Total 24H</div>
-                <div class="stat-value text-info text-2xl">424</div>
+                <div class="stat-title text-xs">Total Events 24H</div>
+                <div class="stat-value text-info text-2xl" id="tl-statTotal">—</div>
               </div>
             </div>
+            <script dangerouslySetInnerHTML={{ __html: `
+(function(){
+  function drawChart(){
+    var canvas = document.getElementById('threatTimelineChart');
+    if(!canvas) return;
+    var dpr = window.devicePixelRatio || 1;
+    var rect = canvas.getBoundingClientRect();
+    if(!rect.width || !rect.height) return;
+    canvas.width = rect.width * dpr;
+    canvas.height = rect.height * dpr;
+    var ctx = canvas.getContext('2d');
+    ctx.scale(dpr, dpr);
+    var W = rect.width, H = rect.height;
+    var N = 24;
+    function rand(max, base){ return Array.from({length:N}, function(){ return Math.floor(Math.random()*max)+base; }); }
+    var series = [
+      { label:'Malicious',  color:'#ef4444', fill:'rgba(239,68,68,0.09)',   data: rand(45, 2)  },
+      { label:'Suspicious', color:'#f59e0b', fill:'rgba(245,158,11,0.09)',  data: rand(35, 8)  },
+      { label:'Blocked',    color:'#22c55e', fill:'rgba(34,197,94,0.09)',   data: rand(65, 15) }
+    ];
+    var allVals = series.reduce(function(a,s){ return a.concat(s.data); }, []);
+    var maxV = Math.max.apply(null, allVals) || 1;
+    var pT=24, pB=36, pL=40, pR=16;
+    var cW=W-pL-pR, cH=H-pT-pB;
+    // grid
+    ctx.strokeStyle = 'rgba(128,128,128,0.15)';
+    ctx.lineWidth = 1;
+    for(var g=0;g<=4;g++){
+      var gy = pT + (cH/4)*g;
+      ctx.beginPath(); ctx.moveTo(pL,gy); ctx.lineTo(pL+cW,gy); ctx.stroke();
+      ctx.fillStyle = 'rgba(128,128,128,0.6)';
+      ctx.font = '9px sans-serif'; ctx.textAlign = 'right';
+      ctx.fillText(Math.round(maxV - (maxV/4)*g), pL-4, gy+3);
+    }
+    // x-axis hour labels
+    ctx.fillStyle = 'rgba(128,128,128,0.6)';
+    ctx.font = '9px sans-serif'; ctx.textAlign = 'center';
+    [0,4,8,12,16,20,23].forEach(function(i){
+      var x = pL + (cW/(N-1))*i;
+      ctx.fillText((i<10?'0':'')+i+':00', x, H-6);
+    });
+    // draw each series (area fill then line)
+    series.forEach(function(s){
+      ctx.beginPath();
+      s.data.forEach(function(val,i){ var x=pL+(cW/(N-1))*i, y=pT+cH-(val/maxV)*cH; if(i===0) ctx.moveTo(x,y); else ctx.lineTo(x,y); });
+      ctx.lineTo(pL+cW, pT+cH); ctx.lineTo(pL, pT+cH); ctx.closePath();
+      ctx.fillStyle = s.fill; ctx.fill();
+      ctx.beginPath();
+      s.data.forEach(function(val,i){ var x=pL+(cW/(N-1))*i, y=pT+cH-(val/maxV)*cH; if(i===0) ctx.moveTo(x,y); else ctx.lineTo(x,y); });
+      ctx.strokeStyle = s.color; ctx.lineWidth = 2; ctx.lineJoin = 'round'; ctx.stroke();
+    });
+    // legend
+    series.forEach(function(s,i){
+      var lx = pL + i*95, ly = pT+2;
+      ctx.fillStyle = s.color; ctx.fillRect(lx, ly, 14, 3);
+      ctx.fillStyle = 'rgba(128,128,128,0.8)';
+      ctx.font = '10px sans-serif'; ctx.textAlign = 'left';
+      ctx.fillText(s.label, lx+18, ly+4);
+    });
+    // update stat cards
+    var malData = series[0].data;
+    var avg = Math.round(malData.reduce(function(a,b){return a+b;},0)/malData.length);
+    var peak = Math.max.apply(null, malData);
+    var total = allVals.reduce(function(a,b){return a+b;},0);
+    var e1=document.getElementById('tl-statAvg'), e2=document.getElementById('tl-statPeak'), e3=document.getElementById('tl-statTotal');
+    if(e1) e1.textContent = avg+'/hr';
+    if(e2) e2.textContent = String(peak);
+    if(e3) e3.textContent = String(total);
+  }
+  if(document.readyState==='loading') document.addEventListener('DOMContentLoaded', drawChart); else drawChart();
+  window.addEventListener('resize', drawChart);
+})();
+            ` }} />
           </div>
         </div>
 
