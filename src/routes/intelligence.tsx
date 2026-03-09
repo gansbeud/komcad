@@ -25,6 +25,24 @@ intelligence.post('/api/check', async (c) => {
       )
     }
 
+    // Combined Analysis: cap at 10 indicators
+    if (isCombined && indicators.length > 10) {
+      return c.html(
+        <div class="alert alert-warning alert-soft">
+          <span>Combined Analysis is limited to 10 indicators. You submitted {indicators.length}. Please reduce your input.</span>
+        </div>
+      )
+    }
+
+    // Combined Analysis: cap at 10 indicators
+    if (isCombined && indicators.length > 10) {
+      return c.html(
+        <div class="alert alert-warning alert-soft">
+          <span>Combined Analysis is limited to 10 indicators. You submitted {indicators.length}. Please reduce your input.</span>
+        </div>
+      )
+    }
+
     // For combined mode, read checkbox sources[]; otherwise single radio source
     const availableSources = ['AbuseIPDB', 'VirusTotal', 'OTX Alienvault']
     let source = ''
@@ -863,9 +881,9 @@ intelligence.get('/', (c) => {
             <p class="text-sm text-base-content/70">Check multiple indicators at once in a table</p>
             <p class="text-xs font-semibold mt-2">Limits:</p>
             <ul class="text-xs space-y-1 list-disc list-inside opacity-70">
-              <li>Up to 100 indicators</li>
+              <li>No indicator limit</li>
               <li>One per line in textarea</li>
-              <li>Mixed types supported</li>
+              <li>Mixed types supported (IP, domain, hash)</li>
               <li>Export to CSV available</li>
             </ul>
             <p id="modeCardHint-bulk" class="text-xs mt-2 text-base-content/40">Auto-detected when &gt;1 line</p>
@@ -883,7 +901,7 @@ intelligence.get('/', (c) => {
               <li>Threat score across indicators</li>
               <li>Shared country / ISP / domain</li>
               <li>OTX pulse overlap detection</li>
-              <li>Up to 20 indicators</li>
+              <li>Max 10 indicators per run</li>
             </ul>
             <p id="modeCardHint-combined" class="text-xs mt-2 text-base-content/40">Select manually above</p>
           </div>
@@ -896,8 +914,9 @@ intelligence.get('/', (c) => {
         <div>
           <h3 class="font-bold">Need Help?</h3>
           <p class="text-sm">
-            Check our documentation for API integration, bulk import guides, and source accuracy
-            rates.
+            Check our documentation at{' '}
+            <a href="https://github.com/gansbeud/komcad/" target="_blank" rel="noopener" class="link link-hover text-primary">github.com/gansbeud/komcad</a>
+            {' '}for API integration, bulk import guides, and source accuracy rates.
           </p>
         </div>
       </div>
@@ -1078,9 +1097,9 @@ intelligence.get('/', (c) => {
             } else {
               ip = r.indicator; hostname = '-'; cc = '-';
             }
-            return '(' + ip + ' (' + hostname + ',' + cc + ')';
+            return ip + ' (' + hostname + ',' + cc + ')';
           }).filter(Boolean);
-          navigator.clipboard.writeText(' ' + entries.join(', ')).then(function () {
+          navigator.clipboard.writeText(entries.join(', ')).then(function () {
             copyPtmBtn.textContent = '\\u2713 Copied!';
             setTimeout(function () { copyPtmBtn.textContent = '\\uD83D\\uDD17 Copy Formatted IP'; }, 2000);
           });

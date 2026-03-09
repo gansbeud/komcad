@@ -1,30 +1,89 @@
-# Komcad — Cyber Intelligence Dashboard
+# KOMCAD — Command of Cyber & Active Defense
 
-A server-side rendered security operations dashboard built with **Hono**, **Tailwind CSS v4**, and **daisyUI 5**, deployed to **Cloudflare Pages**.
+A lightweight cybersecurity operations dashboard built on **Hono** + **DaisyUI** running on **Cloudflare Workers/Pages**.
 
 ---
 
 ## Features
 
-| Area | What's included |
-|------|----------------|
-| **Dashboard** | Live-style threat feed, vulnerability overview, security-systems status, active intelligence feeds, monitored malicious domains |
-| **Threat Intelligence Checker** | Query AbuseIPDB, VirusTotal, and OTX AlienVault for IPs, domains, URLs, and file hashes |
-| **Multi-source support** | Single, Bulk (up to 100 indicators), and Combined Analysis modes |
-| **Themeable UI** | 35+ daisyUI themes selectable at runtime; custom `deepcloud` dark theme included |
-| **SPA navigation** | htmx partial page swaps — sidebar always mounted, no full reloads |
+| Module | Description |
+|---|---|
+| **News Hub** | Aggregates cybersecurity news from 5 RSS feeds (HN, BleepingComputer, Dark Reading, Krebs, SANS ISC). Client-side cache (30-min), source + threat-level filters. |
+| **Threat Intelligence** | Multi-source IP/hash/domain analysis via AbuseIPDB, VirusTotal, and AlienVault OTX. Combined Analysis (max 10 indicators) and unlimited Bulk mode. Copy Formatted IP output. |
+| **Bulk Whois** | Batch IP geolocation via ipinfo.io Lite API. Paste multiple IPs (one per line) and get a full table with org, city, region, country, and timezone. |
+| **Report** | Send a report/feedback email via SMTP using the in-app modal (requires SMTP env vars). |
 
 ---
 
 ## Tech Stack
 
-| Layer | Technology |
-|-------|-----------|
-| Runtime | Cloudflare Pages (edge, `nodejs_compat`) |
-| Framework | [Hono](https://hono.dev) (JSX renderer, routing) |
-| CSS | Tailwind CSS v4 + daisyUI 5 |
-| Build | Vite 6 + `@hono/vite-build` |
-| Nav | htmx 2.x (partial swap) |
+- **[Hono](https://hono.dev/)** v4 — edge-first JSX/SSR framework
+- **[DaisyUI](https://daisyui.com/)** v5 + **[Tailwind CSS](https://tailwindcss.com/)** v4 — component styling
+- **[htmx](https://htmx.org/)** 2.0 — SPA-style navigation without a full frontend framework
+- **[Vite](https://vite.dev/)** + `@hono/vite-build` — build toolchain
+- **Cloudflare Workers/Pages** — deployment target
+- **nodemailer** — SMTP email for report form
+- **ipinfo.io Lite API** — IP geolocation
+
+---
+
+## Setup
+
+### Prerequisites
+
+- Node.js ≥ 18
+- A Cloudflare account (or just use `wrangler dev` locally)
+
+### Install
+
+```bash
+git clone https://github.com/gansbeud/komcad.git
+cd komcad
+npm install
+```
+
+### Configure environment
+
+Copy the example env file and fill in your API keys:
+
+```bash
+cp .env.local.example .env.local   # or create manually
+```
+
+**.env.local**
+
+| Variable | Required | Description |
+|---|---|---|
+| `VIRUSTOTAL_API_KEY` | Yes (for VT lookups) | VirusTotal API key |
+| `ABUSEIPDB_API_KEY` | Yes (for AbuseIPDB lookups) | AbuseIPDB API key |
+| `OTX_API_KEY` | Yes (for OTX lookups) | AlienVault OTX API key |
+| `IPINFO_API_KEY` | Yes (for Bulk Whois) | ipinfo.io API token |
+| `SMTP_HOST` | Optional (for Report form) | SMTP server hostname |
+| `SMTP_PORT` | Optional | SMTP port (e.g. 587) |
+| `SMTP_USER` | Optional | SMTP username |
+| `SMTP_PASS` | Optional | SMTP password |
+| `SMTP_FROM` | Optional | Sender address |
+| `REPORT_TO` | Optional | Recipient address for reports |
+
+### Run locally
+
+```bash
+npm run dev
+```
+
+Open [http://localhost:5173](http://localhost:5173)
+
+### Build for production
+
+```bash
+npm run build
+```
+
+### Deploy to Cloudflare Pages
+
+```bash
+npx wrangler pages deploy dist
+```
 
 ---
 
@@ -32,185 +91,48 @@ A server-side rendered security operations dashboard built with **Hono**, **Tail
 
 ```
 src/
-├── index.tsx               # App entrypoint — Dashboard page + route mounting
-├── renderer.tsx            # Shared JSX layout (navbar, sidebar, theme switcher)
-├── style.css               # Tailwind + daisyUI config + custom deepcloud theme
-├── lib/
-│   ├── abuseipdb.ts        # AbuseIPDB v2 API client + formatter
-│   ├── virustotal.ts       # VirusTotal v3 API client + formatter
-│   └── otx.ts              # OTX AlienVault API client + formatter
-└── routes/
-    ├── api.ts              # JSON REST endpoint  POST /api/check
-    └── intelligence.tsx    # HTML endpoint  GET /intelligence  +  POST /intelligence/api/check
+  index.tsx          # App entry, News Hub page + API routes
+  renderer.tsx       # Shared layout (sidebar, navbar, modals)
+  style.css          # Tailwind + DaisyUI imports
+  lib/
+    abuseipdb.ts     # AbuseIPDB API client
+    virustotal.ts    # VirusTotal API client
+    otx.ts           # AlienVault OTX API client
+    rss.ts           # RSS feed aggregation + parsing
+    whois.ts         # ipinfo.io IP lookup
+    mailer.ts        # SMTP email via nodemailer
+  routes/
+    intelligence.tsx # Threat Intelligence page
+    whois.tsx        # Bulk Whois page
+    dashboard-mock.tsx
+    api.ts
+public/
+  static/            # Static assets
 ```
 
 ---
 
-## Getting Started
+## Need Help?
 
-### 1. Install dependencies
-
-```bash
-npm install
-```
-
-### 2. Configure API keys
-
-Create `.env.local` in the project root:
-
-```env
-ABUSEIPDB_API_KEY=your_key_here
-VIRUSTOTAL_API_KEY=your_key_here
-OTX_API_KEY=your_key_here
-```
-
-Keys are loaded by `vite.config.ts` via `dotenv` during development.  
-For production, set them as [Cloudflare Pages secrets](https://developers.cloudflare.com/pages/platform/environment-variables/).
-
-### 3. Start dev server
-
-```bash
-npm run dev
-```
-
-Open <http://localhost:5173>.
+Visit the project repository: [github.com/gansbeud/komcad](https://github.com/gansbeud/komcad/)
 
 ---
 
-## Available Scripts
+## Changelog
 
-| Command | Description |
-|---------|-------------|
-| `npm run dev` | Vite dev server with hot reload |
-| `npm run build` | Production build into `dist/` |
-| `npm run preview` | Preview production build via Wrangler |
-| `npm run deploy` | Build + deploy to Cloudflare Pages |
-| `npm run cf-typegen` | Regenerate Cloudflare bindings types |
+### 2025-07
+- Added **Bulk Whois** page — batch IP lookup via textarea, IP-only, parallel fetching
+- Threat Intelligence: Combined Analysis capped at 10 indicators per run; Bulk Mode has no limit
+- News Hub: Removed Read More/Less toggle — descriptions shown directly; fixed abbreviation-based sentence truncation
+- Copy Formatted IP output now produces `IP (hostname,CC), ...` format (no extra parenthesis or leading space)
+- Removed search bar from navbar
+- Cleaned up tooltip text on alerts bell and profile button
+- Added GitHub link to Need Help section in Threat Intelligence
 
----
-
-## API Reference
-
-### `POST /api/check`  _(JSON)_
-
-Check one or more indicators against a single source.
-
-**Request body**
-
-```json
-{
-  "indicators": ["8.8.8.8", "malicious.ru"],
-  "source": "VirusTotal",
-  "mode": "Bulk Mode"
-}
-```
-
-**Response**
-
-```json
-{
-  "mode": "Bulk Mode",
-  "source": "VirusTotal",
-  "total_indicators": 2,
-  "results": [
-    {
-      "indicator": "8.8.8.8",
-      "source": "VirusTotal",
-      "result": { "status": "clean", "malicious": 0, "..." : "..." }
-    }
-  ]
-}
-```
-
-`source` must be one of: `AbuseIPDB`, `VirusTotal`, `OTX Alienvault`.  
-Empty lines in `indicators` are silently skipped; `total_indicators` reflects the actual processed count.
-
----
-
-## Indicator Type Detection
-
-Each library auto-detects the indicator type:
-
-| Pattern | Detected as |
-|---------|-------------|
-| `x.x.x.x` (each octet 0–255) | IPv4 |
-| `x:x::x` (2–8 colon-separated hex groups) | IPv6 |
-| 32 / 40 / 64 hex chars | File hash (MD5 / SHA-1 / SHA-256) |
-| `https?://…` | URL |
-| `domain.tld` | Domain |
-
-**AbuseIPDB** only accepts IPv4; other types return `null`.
-
----
-
-## Supported Sources
-
-| Source | Status | Supported types |
-|--------|--------|-----------------|
-| AbuseIPDB | ✅ Live | IPv4 |
-| VirusTotal | ✅ Live | IPv4, domain, URL, hash |
-| OTX AlienVault | ✅ Live | IPv4, IPv6, domain, URL, hash |
-| SOC Radar | 🔜 Planned | — |
-| IBM X-Force | 🔜 Planned | — |
-| MXtoolbox | 🔜 Planned | — |
-| Cisco Talos | 🔜 Planned | — |
-
----
-
-## Theming
-
-The UI ships a custom `deepcloud` dark theme (see `src/style.css`).  
-The theme picker in the navbar lets users switch between all 35+ built-in daisyUI themes at runtime using `theme-controller` radio inputs.  
-The `synthwave` theme is the preferred-dark fallback.
-
----
-
-## Deployment
-
-```bash
-npm run deploy
-```
-
-This runs `vite build` then `wrangler pages deploy ./dist`.  
-Ensure `ABUSEIPDB_API_KEY`, `VIRUSTOTAL_API_KEY`, and `OTX_API_KEY` are set as encrypted environment variables in your Cloudflare Pages project settings.
-
-### Cloudflare bindings
-
-To add KV, R2, D1, or AI bindings, uncomment the relevant sections in `wrangler.jsonc` then regenerate types:
-
-```bash
-npm run cf-typegen
-```
-
-Pass the generated bindings to Hono:
-
-```ts
-// src/index.tsx
-const app = new Hono<{ Bindings: CloudflareBindings }>()
-```
-
----
-
-## Changelog (v4)
-
-> Branch `v4` — corrections applied after full codebase audit.
-
-### Bug fixes
-
-- **`intelligence.tsx`** — removed `onkeyup`/`onchange` inline attributes that referenced `updateModeFromInput` scoped inside an IIFE; they threw `ReferenceError` on every keystroke. The `addEventListener('input', …)` in the inline script is now the sole handler.
-- **`intelligence.tsx`** — replaced `data-results` HTML attribute (missing `&`/`<`/`>` escaping) with a `<script type="application/json">` element; eliminates encoding corruption for indicator values that contain HTML special characters.
-- **`api.ts`** — wrapped all `switch` cases in blocks, fixing a `no-case-declarations` issue where `const` declarations in unscoped case clauses could cause lint errors and unexpected hoisting behaviour.
-- **`api.ts`** — `total_indicators` previously returned the raw input-array length including blank lines; now returns the count of actually processed (non-empty) indicators.
-- **`index.tsx`** — trend badge colour was `badge-error` for every up-trend regardless of context. Added a `goodTrend` flag per stat so "Blocked Attacks ↗" and "Network Uptime ↗" correctly render as `badge-success`.
-
-### Robustness improvements
-
-- **`abuseipdb.ts`** — IPv4 regex now validates each octet to 0–255 (was `\d{1,3}` which accepted `999.999.999.999`).
-- **`otx.ts`** — IPv6 regex tightened to require at least two colon-separated hex groups, rejecting false positives like `beef:`.
-- **`renderer.tsx`** — disabled sidebar `<a>` links now carry `tabindex="-1"` and `aria-disabled="true"` so keyboard users cannot tab into placeholder navigation items.
-
----
-
-## License
-
-MIT
+### 2025-06
+- Initial public release
+- News Hub with 5 RSS sources, source/threat filters, localStorage cache
+- Threat Intelligence: AbuseIPDB + VirusTotal + OTX, Combined Analysis mode
+- Single Whois IP/domain lookup
+- Report modal with SMTP support
+- htmx-based SPA navigation with breadcrumbs

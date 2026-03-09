@@ -129,7 +129,7 @@ function truncateSentences(text: string, max = 3): string {
   const sentences = clean.match(/[^.!?]+[.!?]+/g) ?? [clean]
   const result = sentences.slice(0, max).join(' ').trim()
   // Hard-cap at 300 chars
-  return result.length > 300 ? result.slice(0, 297) + '…' : result
+  return result.length > 600 ? result.slice(0, 597) + '…' : result
 }
 
 // ── Public API ───────────────────────────────────────────────────────────────
@@ -158,7 +158,7 @@ export async function fetchAllNews(): Promise<NewsItem[]> {
           source: source.name,
           sourceIcon: source.icon,
           publishedAt: isoDate,
-          description: truncateSentences(item.description, 2) || 'No summary available.',
+          description: truncateSentences(item.description, 5) || 'No summary available.',
           threatLevel: classifyThreat(combined),
         }
       })

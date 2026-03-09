@@ -3,6 +3,8 @@ import { renderer } from './renderer'
 import { fetchAllNews } from './lib/rss'
 import intelligenceRoutes from './routes/intelligence'
 import dashboardMock from './routes/dashboard-mock'
+import whoisRoutes from './routes/whois'
+import { sendReportEmail } from './lib/mailer'
 
 const app = new Hono()
 
@@ -153,15 +155,11 @@ app.get('/', (c) => {
         /* timestamp */
         '<p class="text-xs opacity-40">'+ relTime(item.publishedAt) +'</p>',
 
-        /* short summary (default visible) */
-        '<p class="text-xs opacity-70 leading-relaxed nc-short" id="'+ id +'-s">'+ esc(item.description) +'</p>',
-
-        /* full description (hidden until expanded) */
-        '<p class="text-xs opacity-75 leading-relaxed nc-full hidden" id="'+ id +'-f">'+ esc(item.description) +'</p>',
+        /* description */
+        '<p class="text-xs opacity-70 leading-relaxed">'+ esc(item.description) +'</p>',
 
         /* action row */
-        '<div class="card-actions justify-between items-center mt-1">',
-          '<button class="btn btn-xs btn-ghost nc-rm-btn" data-id="'+ id +'">▶ Read More</button>',
+        '<div class="card-actions justify-end items-center mt-1">',
           '<a href="'+ esc(item.url) +'" target="_blank" rel="noopener"',
           ' class="btn btn-xs btn-outline">↗ Open</a>',
         '</div>',
@@ -188,18 +186,6 @@ app.get('/', (c) => {
       grid.innerHTML = '<div class="col-span-full text-center py-16 opacity-40 text-sm">No articles match your filters.</div>';
     } else {
       grid.innerHTML = filtered.map(buildCard).join('');
-      /* read-more toggles */
-      grid.querySelectorAll('.nc-rm-btn').forEach(function (btn) {
-        btn.addEventListener('click', function () {
-          var id = btn.getAttribute('data-id');
-          var s  = document.getElementById(id + '-s');
-          var f  = document.getElementById(id + '-f');
-          if (!s || !f) return;
-          var open = !f.classList.contains('hidden');
-          if (open) { f.classList.add('hidden');    s.classList.remove('hidden'); btn.textContent = '▶ Read More'; }
-          else      { s.classList.add('hidden');    f.classList.remove('hidden'); btn.textContent = '▼ Read Less'; }
-        });
-      });
     }
 
     var cntEl = document.getElementById('news-count');
@@ -323,6 +309,8 @@ app.get('/', (c) => {
 })();
       ` }} />
     </div>,
+    // @ts-expect-error
+    { title: 'News Hub' }
   )
 })
 
@@ -331,5 +319,29 @@ app.route('/dashboard-mock', dashboardMock)
 
 // ── Intelligence tools ────────────────────────────────────────────────────────
 app.route('/intelligence', intelligenceRoutes)
+app.route('/whois', whoisRoutes)
+
+// ── Report / Contact form submission ─────────────────────────────────────────
+app.post('/api/report', async (c) => {
+  try {
+    const form    = await c.req.formData()
+    const name    = (form.get('name')    as string ?? '').trim()
+    const email   = (form.get('email')   as string ?? '').trim()
+    const message = (form.get('message') as string ?? '').trim()
+
+    if (!name || !email || !message) {
+      return c.json({ success: false, message: 'All fields are required.' }, 400)
+    }
+
+    await sendReportEmail(c.env as any, name, email, message)
+    return c.json({ success: true, message: 'Your message has been sent. Thank you!' })
+  } catch (err) {
+    console.error('Report email error:', err)
+    return c.json(
+      { success: false, message: err instanceof Error ? err.message : 'Failed to send message.' },
+      500
+    )
+  }
+})
 
 export default app

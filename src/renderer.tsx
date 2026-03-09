@@ -1,19 +1,18 @@
 import { jsxRenderer } from 'hono/jsx-renderer'
 
 export const renderer = jsxRenderer(({ children, title }: any, c: any) => {
-  // For htmx partial navigation: return only the content fragment.
-  // The sidebar/navbar stay mounted — no flicker.
+  // HTMX partial navigation: return only content + OOB breadcrumb swap
   if (c.req.header('HX-Request')) {
-    c.header('HX-Title', title ?? 'Dashboard')
+    c.header('HX-Title', title ?? 'News Hub')
     return (
       <>
-        {/* OOB-swap the breadcrumb title so it stays in sync */}
+        {/* OOB-swap breadcrumb so it stays in sync without full reload */}
         <span
           id="breadcrumb-current"
           {...{ 'hx-swap-oob': 'true' }}
           class="text-primary font-semibold"
         >
-          {title ?? 'Overview'}
+          {title ?? 'News Hub'}
         </span>
         {children}
       </>
@@ -24,9 +23,8 @@ export const renderer = jsxRenderer(({ children, title }: any, c: any) => {
     <html>
       <head>
         <meta charset="utf-8" />
-        <title>{title ?? "Dashboard"}</title>
+        <title>{title ?? 'KOMCAD'}</title>
         <link rel="stylesheet" href="/src/style.css" />
-        {/* htmx — enables SPA-like partial navigation without a full page reload */}
         <script src="https://unpkg.com/htmx.org@2.0.4/dist/htmx.min.js" />
       </head>
 
@@ -36,314 +34,333 @@ export const renderer = jsxRenderer(({ children, title }: any, c: any) => {
 
           <input id="sidebar" type="checkbox" class="drawer-toggle" />
 
-          {/* PAGE CONTENT */}
+          {/* ── PAGE CONTENT ── */}
           <div class="drawer-content flex flex-col">
 
             {/* NAVBAR */}
-            <div class="navbar bg-base-100 border-b border-base-300 shadow-md sticky top-0 z-40">
+            <div class="navbar bg-base-100 border-b border-base-300 shadow-md sticky top-0 z-40 min-h-12 py-1">
 
-              <div class="flex-none">
-                <label for="sidebar" class="btn btn-square btn-ghost btn-lg">
-                  ☰
-                </label>
+              <div class="flex-none lg:hidden">
+                <label for="sidebar" class="btn btn-square btn-ghost btn-sm">☰</label>
               </div>
 
+              {/* Breadcrumb */}
               <div class="flex-1 px-4">
                 <div class="breadcrumbs text-sm">
                   <ul>
-                    <li><a href="/" class="link link-hover">Home</a></li>
-                    <li><a href="/" class="link link-hover">News Hub</a></li>
-                    <li><span id="breadcrumb-current" class="text-primary font-semibold">{title ?? 'Overview'}</span></li>
+                    <li>
+                      <a
+                        {...{ 'hx-get': '/', 'hx-target': '#page-content', 'hx-push-url': 'true', 'hx-swap': 'innerHTML' }}
+                        class="link link-hover"
+                      >
+                        Home
+                      </a>
+                    </li>
+                    <li>
+                      <span id="breadcrumb-current" class="text-primary font-semibold">
+                        {title ?? 'News Hub'}
+                      </span>
+                    </li>
                   </ul>
                 </div>
               </div>
 
-              <div class="flex items-center gap-3">
+              <div class="flex items-center gap-2">
 
-                {/* SEARCH BAR */}
-                <div class="form-control hidden md:block">
-                  <input type="text" placeholder="Search threats, IPs, domains..." class="input input-bordered input-sm w-64 focus:input-primary transition-all" />
+
+                {/* Alerts bell — non-interactive (not configured) */}
+                <div
+                  class="btn btn-ghost btn-circle btn-sm indicator cursor-not-allowed opacity-60 tooltip tooltip-left"
+                  data-tip="Alerts (3 new)"
+                  tabindex={-1}
+                  aria-disabled="true"
+                >
+                  <span class="indicator-item badge badge-error badge-xs font-bold">3</span>
+                  🔔
                 </div>
 
-                {/* SEARCH ICON - MOBILE */}
-                <button class="btn btn-ghost btn-circle md:hidden tooltip tooltip-left" data-tip="Search">
-                  🔍
-                </button>
-
-                {/* NOTIFICATIONS */}
+                {/* Theme toggle */}
                 <div class="dropdown dropdown-end">
-                  <button class="btn btn-ghost btn-circle indicator indicator-center tooltip tooltip-left" data-tip="Alerts (3 new)">
-                    <span class="indicator-item badge badge-error badge-xs font-bold">3</span>
-                    🔔
-                  </button>
-                  <ul class="dropdown-content menu p-3 shadow bg-base-100 rounded-box w-72 gap-2">
-                    <li class="menu-title"><span>Recent Alerts</span></li>
-                    <li><a class="hover:bg-error/10">
-                      <span class="badge badge-error badge-sm">Critical</span>
-                      DDoS attack detected on port 443
-                    </a></li>
-                    <li><a class="hover:bg-warning/10">
-                      <span class="badge badge-warning badge-sm">High</span>
-                      Malware signature matched on 3 hosts
-                    </a></li>
-                    <li><a class="hover:bg-info/10">
-                      <span class="badge badge-info badge-sm">Info</span>
-                      New vulnerability CVE-2024-1234
-                    </a></li>
-                  </ul>
-                </div>
-
-                {/* THEME TOGGLE */}
-                <div class="dropdown dropdown-end">
-                  <button class="btn btn-ghost btn-circle tooltip tooltip-left" data-tip="Theme">
+                  <button class="btn btn-ghost btn-circle btn-sm tooltip tooltip-left" data-tip="Theme">
                     🎨
                   </button>
-
-                  <ul class="dropdown-content menu shadow-lg bg-base-100 rounded-box w-53 max-h-200 overflow-y-auto p-2 gap-1">
-                    <li><input type="radio" name="theme" class="theme-controller btn btn-sm btn-outline justify-start" value="light" aria-label="Light"/></li>
-                    <li><input type="radio" name="theme" class="theme-controller btn btn-sm btn-outline justify-start" value="dark" aria-label="Dark" checked/></li>
-                    <li><input type="radio" name="theme" class="theme-controller btn btn-sm btn-outline justify-start" value="cupcake" aria-label="Cupcake"/></li>
-                    <li><input type="radio" name="theme" class="theme-controller btn btn-sm btn-outline justify-start" value="bumblebee" aria-label="Bumblebee"/></li>
-                    <li><input type="radio" name="theme" class="theme-controller btn btn-sm btn-outline justify-start" value="emerald" aria-label="Emerald"/></li>
-                    <li><input type="radio" name="theme" class="theme-controller btn btn-sm btn-outline justify-start" value="corporate" aria-label="Corporate"/></li>
-                    <li><input type="radio" name="theme" class="theme-controller btn btn-sm btn-outline justify-start" value="synthwave" aria-label="Synthwave"/></li>
-                    <li><input type="radio" name="theme" class="theme-controller btn btn-sm btn-outline justify-start" value="retro" aria-label="Retro"/></li>
-                    <li><input type="radio" name="theme" class="theme-controller btn btn-sm btn-outline justify-start" value="cyberpunk" aria-label="Cyberpunk"/></li>
-                    <li><input type="radio" name="theme" class="theme-controller btn btn-sm btn-outline justify-start" value="valentine" aria-label="Valentine"/></li>
-                    <li><input type="radio" name="theme" class="theme-controller btn btn-sm btn-outline justify-start" value="halloween" aria-label="Halloween"/></li>
-                    <li><input type="radio" name="theme" class="theme-controller btn btn-sm btn-outline justify-start" value="garden" aria-label="Garden"/></li>
-                    <li><input type="radio" name="theme" class="theme-controller btn btn-sm btn-outline justify-start" value="forest" aria-label="Forest"/></li>
-                    <li><input type="radio" name="theme" class="theme-controller btn btn-sm btn-outline justify-start" value="aqua" aria-label="Aqua"/></li>
-                    <li><input type="radio" name="theme" class="theme-controller btn btn-sm btn-outline justify-start" value="lofi" aria-label="Lo-Fi"/></li>
-                    <li><input type="radio" name="theme" class="theme-controller btn btn-sm btn-outline justify-start" value="pastel" aria-label="Pastel"/></li>
-                    <li><input type="radio" name="theme" class="theme-controller btn btn-sm btn-outline justify-start" value="fantasy" aria-label="Fantasy"/></li>
-                    <li><input type="radio" name="theme" class="theme-controller btn btn-sm btn-outline justify-start" value="wireframe" aria-label="Wireframe"/></li>
-                    <li><input type="radio" name="theme" class="theme-controller btn btn-sm btn-outline justify-start" value="black" aria-label="Black"/></li>
-                    <li><input type="radio" name="theme" class="theme-controller btn btn-sm btn-outline justify-start" value="luxury" aria-label="Luxury"/></li>
-                    <li><input type="radio" name="theme" class="theme-controller btn btn-sm btn-outline justify-start" value="dracula" aria-label="Dracula"/></li>
-                    <li><input type="radio" name="theme" class="theme-controller btn btn-sm btn-outline justify-start" value="cmyk" aria-label="CMYK"/></li>
-                    <li><input type="radio" name="theme" class="theme-controller btn btn-sm btn-outline justify-start" value="autumn" aria-label="Autumn"/></li>
-                    <li><input type="radio" name="theme" class="theme-controller btn btn-sm btn-outline justify-start" value="business" aria-label="Business"/></li>
-                    <li><input type="radio" name="theme" class="theme-controller btn btn-sm btn-outline justify-start" value="acid" aria-label="Acid"/></li>
-                    <li><input type="radio" name="theme" class="theme-controller btn btn-sm btn-outline justify-start" value="lemonade" aria-label="Lemonade"/></li>
-                    <li><input type="radio" name="theme" class="theme-controller btn btn-sm btn-outline justify-start" value="night" aria-label="Night"/></li>
-                    <li><input type="radio" name="theme" class="theme-controller btn btn-sm btn-outline justify-start" value="coffee" aria-label="Coffee"/></li>
-                    <li><input type="radio" name="theme" class="theme-controller btn btn-sm btn-outline justify-start" value="winter" aria-label="Winter"/></li>
-                    <li><input type="radio" name="theme" class="theme-controller btn btn-sm btn-outline justify-start" value="dim" aria-label="Dim"/></li>
-                    <li><input type="radio" name="theme" class="theme-controller btn btn-sm btn-outline justify-start" value="nord" aria-label="Nord"/></li>
-                    <li><input type="radio" name="theme" class="theme-controller btn btn-sm btn-outline justify-start" value="sunset" aria-label="Sunset"/></li>
-                    <li><input type="radio" name="theme" class="theme-controller btn btn-sm btn-outline justify-start" value="caramellatte" aria-label="Caramel Latte"/></li>
-                    <li><input type="radio" name="theme" class="theme-controller btn btn-sm btn-outline justify-start" value="abyss" aria-label="Abyss"/></li>
-                    <li><input type="radio" name="theme" class="theme-controller btn btn-sm btn-outline justify-start" value="silk" aria-label="Silk"/></li>
+                  <ul class="dropdown-content menu shadow-lg bg-base-100 rounded-box w-52 max-h-80 overflow-y-auto p-2 gap-1">
+                    {[
+                      'light','dark','cupcake','bumblebee','emerald','corporate','synthwave',
+                      'retro','cyberpunk','valentine','halloween','garden','forest','aqua',
+                      'lofi','pastel','fantasy','wireframe','black','luxury','dracula','cmyk',
+                      'autumn','business','acid','lemonade','night','coffee','winter','dim',
+                      'nord','sunset','caramellatte','abyss','silk',
+                    ].map((t) => (
+                      <li key={t}>
+                        <input
+                          type="radio"
+                          name="theme"
+                          class="theme-controller btn btn-xs btn-outline justify-start"
+                          value={t}
+                          aria-label={t.charAt(0).toUpperCase() + t.slice(1)}
+                          {...(t === 'dark' ? { checked: true } : {})}
+                        />
+                      </li>
+                    ))}
                   </ul>
                 </div>
-                
-                {/* USER PROFILE */}
-                <div class="dropdown dropdown-end">
 
-                  <div tabindex={0} role="button" class="btn btn-ghost btn-circle avatar tooltip tooltip-left" data-tip="Profile">
-                    <div class="w-10 rounded-full bg-linear-to-br from-primary to-secondary text-primary-content flex items-center justify-center font-bold text-lg">
-                      AK
-                    </div>
+                {/* Profile — non-interactive (not configured) */}
+                <div
+                  class="btn btn-ghost btn-circle btn-sm avatar cursor-not-allowed opacity-60 tooltip tooltip-left"
+                  data-tip="Profile"
+                  tabindex={-1}
+                  aria-disabled="true"
+                >
+                  <div class="w-8 rounded-full bg-gradient-to-br from-primary to-secondary text-primary-content flex items-center justify-center font-bold text-sm">
+                    AK
                   </div>
-
-                  <ul class="dropdown-content menu p-2 shadow bg-base-100 rounded-box w-56 gap-1">
-                    <li class="menu-title text-center py-2">
-                      <span>Admin Analyst</span>
-                    </li>
-                    <div class="divider my-0"></div>
-                    <li><a class="hover:bg-primary/10">👤 Profile</a></li>
-                    <li><a class="hover:bg-info/10">⚙️ Settings</a></li>
-                    <li><a class="hover:bg-warning/10">📊 Activity Log</a></li>
-                    <div class="divider my-0"></div>
-                    <li><a class="text-error hover:bg-error/10">🚪 Logout</a></li>
-                  </ul>
-
                 </div>
 
               </div>
             </div>
 
             {/* MAIN CONTENT */}
-            <main id="page-content" class="p-4 md:p-8 flex-1">
+            <main id="page-content" class="p-4 md:p-6 flex-1">
               {children}
             </main>
 
             {/* FOOTER */}
-            <footer class="footer footer-center bg-base-100 border-t border-base-300 p-4 text-base-content/70">
+            <footer class="footer footer-center bg-base-100 border-t border-base-300 p-3 text-base-content/70">
               <div class="text-xs">
-                <p>© 2026 Project-K Intelligence | Security Dashboard v2.4</p>
+                <p>© 2026 KOMCAD — Command of Cyber &amp; Active Defense</p>
               </div>
             </footer>
 
           </div>
 
+          {/* ── SIDEBAR ── */}
+          <div class="drawer-side">
+            <label for="sidebar" class="drawer-overlay"></label>
 
-          {/* SIDEBAR */}
-          <div class="drawer-side is-drawer-close:overflow-visible">
-            <label for="sidebar" aria-label="close sidebar" class="drawer-overlay"></label>
+            <aside class="w-60 bg-base-100 border-r border-base-300 flex flex-col h-screen">
 
-            <div class="is-drawer-close:w-14 is-drawer-open:w-64 bg-base-100 border-r border-base-300 flex flex-col h-screen overflow-hidden transition-[width] duration-300">
-
-              {/* SIDEBAR HEADER */}
+              {/* Sidebar header */}
               <div class="p-3 border-b border-base-300 shrink-0">
-                <div class="flex items-center gap-2 overflow-hidden">
-                  <div class="badge badge-primary badge-md shrink-0">◆</div>
-                  <div class="is-drawer-close:hidden whitespace-nowrap">
-                    <div class="font-bold text-primary text-sm leading-tight">
-                      Project-K
-                    </div>
-                    <div class="text-xs opacity-50">
-                      Cyber Intel
-                    </div>
+                <div class="flex items-center gap-2">
+                  <div class="badge badge-primary badge-sm">◆</div>
+                  <div>
+                    <div class="font-bold text-primary text-sm leading-tight">KOMCAD</div>
+                    <div class="text-xs opacity-50 leading-tight">Command of Cyber &amp; Active Defense</div>
                   </div>
                 </div>
               </div>
 
-              {/* SIDEBAR MENU - SCROLLABLE */}
+              {/* Sidebar menu — scrollable */}
               <div class="flex-1 overflow-y-auto">
-                <ul class="menu w-full px-3 py-2 gap-2 text-sm">
+                <ul class="menu w-full px-2 py-2 gap-0.5 text-sm">
 
+                  {/* News Hub — main page */}
                   <li>
                     <a
                       {...{ 'hx-get': '/', 'hx-target': '#page-content', 'hx-push-url': 'true', 'hx-swap': 'innerHTML' }}
-                      class="h-12 hover:bg-primary/20 nav-link is-drawer-close:tooltip is-drawer-close:tooltip-right"
+                      class="py-1.5 hover:bg-primary/20 nav-link gap-2"
                       data-path="/"
-                      data-tip="News Hub"
                     >
-                      <span class="text-xl">📰</span>
-                      <span class="text-base font-semibold is-drawer-close:hidden">News Hub</span>
+                      <span>📰</span>
+                      <span>News Hub</span>
                     </a>
                   </li>
 
-                  <li>
-                    <a
-                      {...{ 'hx-get': '/dashboard-mock', 'hx-target': '#page-content', 'hx-push-url': 'true', 'hx-swap': 'innerHTML' }}
-                      class="h-12 hover:bg-primary/20 nav-link is-drawer-close:tooltip is-drawer-close:tooltip-right"
-                      data-path="/dashboard-mock"
-                      data-tip="Dashboard - Mock"
-                    >
-                      <span class="text-xl">📊</span>
-                      <span class="text-base font-semibold is-drawer-close:hidden">Dashboard - Mock</span>
-                    </a>
-                  </li>
-
+                  {/* Intelligence */}
                   <li>
                     <a
                       {...{ 'hx-get': '/intelligence', 'hx-target': '#page-content', 'hx-push-url': 'true', 'hx-swap': 'innerHTML' }}
-                      class="h-12 hover:bg-primary/20 nav-link is-drawer-close:tooltip is-drawer-close:tooltip-right"
+                      class="py-1.5 hover:bg-primary/20 nav-link gap-2"
                       data-path="/intelligence"
-                      data-tip="Intelligence"
                     >
-                      <span class="text-xl">🔍</span>
-                      <span class="text-base font-semibold is-drawer-close:hidden">Intelligence</span>
+                      <span>🔍</span>
+                      <span>Intelligence</span>
                     </a>
                   </li>
 
-                  <li class="menu-disabled opacity-60 cursor-not-allowed">
-                    <a class="h-12 is-drawer-close:tooltip is-drawer-close:tooltip-right" data-tip="Whois" tabindex={-1} aria-disabled="true">
-                      <span class="text-xl">🌐</span>
-                      <span class="text-base font-semibold is-drawer-close:hidden">Whois</span>
+                  {/* Bulk Whois — enabled */}
+                  <li>
+                    <a
+                      {...{ 'hx-get': '/whois', 'hx-target': '#page-content', 'hx-push-url': 'true', 'hx-swap': 'innerHTML' }}
+                      class="py-1.5 hover:bg-primary/20 nav-link gap-2"
+                      data-path="/whois"
+                    >
+                      <span>🌐</span>
+                      <span>Bulk Whois</span>
                     </a>
                   </li>
 
-                  <li class="menu-disabled opacity-60 cursor-not-allowed">
-                    <a class="h-12 is-drawer-close:tooltip is-drawer-close:tooltip-right" data-tip="NMAP / RustScan" tabindex={-1} aria-disabled="true">
-                      <span class="text-xl">🔎</span>
-                      <span class="text-base font-semibold is-drawer-close:hidden">NMAP / RustScan</span>
-                    </a>
-                  </li>
+                  <div class="divider my-1 text-xs opacity-40">Coming Soon</div>
 
-                  <li class="menu-disabled opacity-60 cursor-not-allowed">
-                    <a class="h-12 is-drawer-close:tooltip is-drawer-close:tooltip-right" data-tip="HTTP Proxy" tabindex={-1} aria-disabled="true">
-                      <span class="text-xl">📡</span>
-                      <span class="text-base font-semibold is-drawer-close:hidden">HTTP Proxy</span>
-                    </a>
-                  </li>
-
-                  <li class="menu-disabled opacity-60 cursor-not-allowed">
-                    <a class="h-12 is-drawer-close:tooltip is-drawer-close:tooltip-right" data-tip="MISP" tabindex={-1} aria-disabled="true">
-                      <span class="text-xl">🧩</span>
-                      <span class="text-base font-semibold is-drawer-close:hidden">MISP</span>
-                    </a>
-                  </li>
-
-                  <li class="menu-disabled opacity-60 cursor-not-allowed">
-                    <a class="h-12 is-drawer-close:tooltip is-drawer-close:tooltip-right" data-tip="Report Utility" tabindex={-1} aria-disabled="true">
-                      <span class="text-xl">📋</span>
-                      <span class="text-base font-semibold is-drawer-close:hidden">Report Utility</span>
-                    </a>
-                  </li>
-
-                  <li class="menu-disabled opacity-60 cursor-not-allowed">
-                    <a class="h-12 is-drawer-close:tooltip is-drawer-close:tooltip-right" data-tip="Audit Log" tabindex={-1} aria-disabled="true">
-                      <span class="text-xl">📜</span>
-                      <span class="text-base font-semibold is-drawer-close:hidden">Audit Log</span>
-                    </a>
-                  </li>
-
-                  <li class="menu-disabled opacity-60 cursor-not-allowed">
-                    <a class="h-12 is-drawer-close:tooltip is-drawer-close:tooltip-right" data-tip="Health" tabindex={-1} aria-disabled="true">
-                      <span class="text-xl">⚕️</span>
-                      <span class="text-base font-semibold is-drawer-close:hidden">Health</span>
-                    </a>
-                  </li>
-
-                  <li class="menu-disabled opacity-60 cursor-not-allowed">
-                    <a class="h-12 is-drawer-close:tooltip is-drawer-close:tooltip-right" data-tip="Configuration" tabindex={-1} aria-disabled="true">
-                      <span class="text-xl">⚙️</span>
-                      <span class="text-base font-semibold is-drawer-close:hidden">Configuration</span>
-                    </a>
-
-                  </li>
+                  {/* Disabled items */}
+                  {[
+                    { icon: '🔎', label: 'NMAP / RustScan' },
+                    { icon: '📡', label: 'HTTP Proxy' },
+                    { icon: '🧩', label: 'MISP' },
+                    { icon: '📋', label: 'Report Utility' },
+                    { icon: '📜', label: 'Audit Log' },
+                    { icon: '⚕️', label: 'Health' },
+                    { icon: '⚙️', label: 'Configuration' },
+                  ].map((item) => (
+                    <li key={item.label} class="opacity-40 pointer-events-none select-none">
+                      <span class="py-1.5 gap-2 cursor-not-allowed">
+                        <span>{item.icon}</span>
+                        <span>{item.label}</span>
+                      </span>
+                    </li>
+                  ))}
 
                 </ul>
               </div>
 
-              {/* SIDEBAR FOOTER */}
-              <div class="border-t border-base-300 p-2.5 space-y-1.5 mt-auto shrink-0">
-                {/* STATUS INDICATOR */}
-                <div class="badge badge-md badge-outline w-full gap-1 text-xs is-drawer-close:hidden">
-                  <span class="status status-success status-xs"></span>
-                  All Systems OK
-                </div>
-
-                {/* ACTION BUTTON */}
-                <button class="btn btn-primary btn-sm w-full is-drawer-close:hidden">
-                  💬 Report
+              {/* Sidebar footer — only report button */}
+              <div class="border-t border-base-300 p-2 shrink-0">
+                <button
+                  class="btn btn-primary btn-sm w-full"
+                  onclick="document.getElementById('report_modal').showModal()"
+                >
+                  📬 Report Problem / Contact Me
                 </button>
-
-                {/* HELP LINK */}
-                <a class="link link-hover text-xs opacity-50 block text-center is-drawer-close:hidden">
-                  Help
-                </a>
-
-                {/* SIDEBAR TOGGLE */}
-                <div class="is-drawer-close:tooltip is-drawer-close:tooltip-right" data-tip="Expand Sidebar">
-                  <label for="sidebar" class="btn btn-ghost btn-sm w-full flex items-center justify-center drawer-button cursor-pointer">
-                    ↔
-                  </label>
-                </div>
               </div>
 
-            </div>
+            </aside>
           </div>
 
         </div>
 
-        {/* Keep active sidebar link in sync with the current URL (initial load + htmx navigations) */}
+        {/* ── REPORT MODAL ── */}
+        <dialog id="report_modal" class="modal">
+          <div class="modal-box w-full max-w-lg">
+            <h3 class="font-bold text-lg mb-1">📬 Report Problem / Contact Me</h3>
+            <p class="text-sm text-base-content/60 mb-4">
+              Send a message directly to the administrator.
+            </p>
+
+            <form id="reportForm" novalidate>
+              <div class="space-y-3">
+                <fieldset class="fieldset">
+                  <legend class="fieldset-legend text-xs">Your Name</legend>
+                  <input
+                    type="text"
+                    name="name"
+                    id="reportName"
+                    class="input input-bordered w-full input-sm"
+                    placeholder="Full name"
+                    required
+                  />
+                </fieldset>
+
+                <fieldset class="fieldset">
+                  <legend class="fieldset-legend text-xs">Email Address</legend>
+                  <input
+                    type="email"
+                    name="email"
+                    id="reportEmail"
+                    class="input input-bordered w-full input-sm"
+                    placeholder="your@email.com"
+                    required
+                  />
+                </fieldset>
+
+                <fieldset class="fieldset">
+                  <legend class="fieldset-legend text-xs">Message</legend>
+                  <textarea
+                    name="message"
+                    id="reportMessage"
+                    class="textarea textarea-bordered w-full h-28 resize-none text-sm"
+                    placeholder="Describe the issue or your message..."
+                    required
+                  />
+                </fieldset>
+              </div>
+
+              {/* Status area */}
+              <div id="reportStatus" class="mt-3 hidden"></div>
+
+              <div class="modal-action mt-4">
+                <button
+                  type="button"
+                  class="btn btn-ghost btn-sm"
+                  onclick="document.getElementById('report_modal').close()"
+                >
+                  Cancel
+                </button>
+                <button type="submit" class="btn btn-primary btn-sm" id="reportSubmitBtn">
+                  Send Message
+                </button>
+              </div>
+            </form>
+          </div>
+          <form method="dialog" class="modal-backdrop">
+            <button>close</button>
+          </form>
+        </dialog>
+
+        {/* ── SCRIPTS ── */}
         <script dangerouslySetInnerHTML={{ __html: `
-          (function () {
-            function syncNav() {
-              var p = location.pathname.replace(/\/$/, '') || '/';
-              document.querySelectorAll('.nav-link').forEach(function (el) {
-                var target = (el.getAttribute('data-path') || '').replace(/\/$/, '') || '/';
-                el.classList.toggle('active', target === p);
-              });
-            }
-            syncNav();
-            document.addEventListener('htmx:afterSettle', syncNav);
-          })();
+(function () {
+  // ── Active nav link sync ──────────────────────────────────────────────────
+  function syncNav() {
+    var p = location.pathname.replace(/\\/$/, '') || '/';
+    document.querySelectorAll('.nav-link').forEach(function (el) {
+      var target = (el.getAttribute('data-path') || '').replace(/\\/$/, '') || '/';
+      el.classList.toggle('active', target === p);
+    });
+  }
+  syncNav();
+  document.addEventListener('htmx:afterSettle', syncNav);
+
+  // ── Report form submission ────────────────────────────────────────────────
+  document.addEventListener('submit', function (e) {
+    if (e.target && e.target.id === 'reportForm') {
+      e.preventDefault();
+      var form   = e.target;
+      var btn    = document.getElementById('reportSubmitBtn');
+      var status = document.getElementById('reportStatus');
+      var name    = document.getElementById('reportName').value.trim();
+      var email   = document.getElementById('reportEmail').value.trim();
+      var message = document.getElementById('reportMessage').value.trim();
+
+      if (!name || !email || !message) {
+        status.className = 'mt-3 alert alert-warning alert-soft text-sm';
+        status.textContent = 'Please fill in all fields.';
+        return;
+      }
+
+      btn.disabled = true;
+      btn.textContent = 'Sending…';
+      status.className = 'mt-3 hidden';
+
+      var fd = new FormData(form);
+      fetch('/api/report', { method: 'POST', body: fd })
+        .then(function (r) { return r.json(); })
+        .then(function (res) {
+          if (res.success) {
+            status.className = 'mt-3 alert alert-success alert-soft text-sm';
+            status.textContent = res.message || 'Message sent!';
+            form.reset();
+            setTimeout(function () {
+              document.getElementById('report_modal').close();
+              status.className = 'mt-3 hidden';
+            }, 2200);
+          } else {
+            status.className = 'mt-3 alert alert-error alert-soft text-sm';
+            status.textContent = res.message || 'Failed to send.';
+          }
+        })
+        .catch(function (err) {
+          status.className = 'mt-3 alert alert-error alert-soft text-sm';
+          status.textContent = 'Network error: ' + err.message;
+        })
+        .finally(function () {
+          btn.disabled = false;
+          btn.textContent = 'Send Message';
+        });
+    }
+  });
+})();
         `}} />
 
       </body>
