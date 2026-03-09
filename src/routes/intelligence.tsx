@@ -13,9 +13,9 @@ intelligence.post('/api/check', async (c) => {
       .split('\n')
       .map((i) => i.trim())
       .filter((i) => i.length > 0)
-    const source = String(formData.get('source') || 'AbuseIPDB')
     const mode = String(formData.get('mode') || 'Single Mode')
     const maxAgeInDays = Math.max(1, Math.min(365, parseInt(String(formData.get('maxAgeInDays') || '180'), 10) || 180))
+    const isCombined = mode === 'Combined Analysis'
 
     if (indicators.length === 0) {
       return c.html(
@@ -25,15 +25,305 @@ intelligence.post('/api/check', async (c) => {
       )
     }
 
+    // For combined mode, read checkbox sources[]; otherwise single radio source
     const availableSources = ['AbuseIPDB', 'VirusTotal', 'OTX Alienvault']
-    if (!availableSources.includes(source)) {
+    let source = ''
+    let combinedSources: string[] = []
+
+    if (isCombined) {
+      combinedSources = formData.getAll('sources').map(String).filter((s: string) => availableSources.includes(s))
+      if (combinedSources.length === 0) combinedSources = ['AbuseIPDB', 'VirusTotal', 'OTX Alienvault']
+      source = combinedSources.join(', ')
+    } else {
+      source = String(formData.get('source') || 'AbuseIPDB')
+      if (!availableSources.includes(source)) {
+        return c.html(
+          <div class="alert alert-error alert-soft">
+            <span>Source {source} is not available yet</span>
+          </div>
+        )
+      }
+    }
+
+    // Jakarta time (WIB = UTC+7)
+    const submittedAt =
+      new Date().toLocaleString('en-GB', {
+        timeZone: 'Asia/Jakarta',
+        day: '2-digit',
+        month: 'short',
+        year: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit',
+        hour12: false,
+      }) + ' WIB'
+
+    // Audit API URL
+    const apiUrl =
+      isCombined
+        ? 'AbuseIPDB + VirusTotal + OTX Alienvault (parallel)'
+        : source === 'AbuseIPDB'
+          ? `https://api.abuseipdb.com/api/v2/check?maxAgeInDays=${maxAgeInDays}&verbose=1`
+          : source === 'VirusTotal'
+            ? 'https://www.virustotal.com/api/v3/{type}/{indicator}'
+            : 'https://otx.alienvault.com/api/v1/indicators/IPv4/{indicator}/general'
+
+    // Null-safe cell helpers
+    const v = (val: any) => (val !== null && val !== undefined ? String(val) : '-')
+    const bv = (val: any) => (val === null || val === undefined ? '-' : val ? 'Yes' : 'No')
+    const toJakartaTime = (dateStr: string | null | undefined): string => {
+      if (!dateStr) return '-'
+      try {
+        const date = new Date(dateStr)
+        if (isNaN(date.getTime())) return String(dateStr)
+        return date.toLocaleString('en-GB', {
+          timeZone: 'Asia/Jakarta', day: '2-digit', month: 'short', year: 'numeric',
+          hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false,
+        }) + ' WIB'
+      } catch { return String(dateStr) }
+    }
+    const unixToJakartaTime = (ts: number | null | undefined): string => {
+      if (!ts) return '-'
+      try {
+        return new Date(ts * 1000).toLocaleString('en-GB', {
+          timeZone: 'Asia/Jakarta', day: '2-digit', month: 'short', year: 'numeric',
+          hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false,
+        }) + ' WIB'
+      } catch { return '-' }
+    }
+
+    // ── COMBINED ANALYSIS: parallel multi-source per indicator ─────────────────
+    if (isCombined) {
+      type CombinedRow = {
+        indicator: string
+        abdb: any
+        vt: any
+        otx: any
+        errors: Record<string, string>
+      }
+
+      const combinedResults: CombinedRow[] = await Promise.all(
+        indicators.map(async (indicator) => {
+          const row: CombinedRow = { indicator, abdb: null, vt: null, otx: null, errors: {} }
+          await Promise.all([
+            combinedSources.includes('AbuseIPDB')
+              ? checkAbuseIPDB(indicator, maxAgeInDays)
+                  .then((r) => { row.abdb = formatAbuseIPDBResult(r) })
+                  .catch((e) => { row.errors['AbuseIPDB'] = e instanceof Error ? e.message : 'Error' })
+              : Promise.resolve(),
+            combinedSources.includes('VirusTotal')
+              ? checkVirusTotal(indicator)
+                  .then((r) => { row.vt = formatVirusTotalResult(r, indicator) })
+                  .catch((e) => { row.errors['VirusTotal'] = e instanceof Error ? e.message : 'Error' })
+              : Promise.resolve(),
+            combinedSources.includes('OTX Alienvault')
+              ? checkOTX(indicator)
+                  .then((r) => { row.otx = formatOTXResult(r, indicator) })
+                  .catch((e) => { row.errors['OTX Alienvault'] = e instanceof Error ? e.message : 'Error' })
+              : Promise.resolve(),
+          ])
+          return row
+        })
+      )
+
+      const maliciousCount = combinedResults.filter((r) => {
+        const abdbMal = r.abdb && (r.abdb.abuseConfidenceScore ?? 0) > 75
+        const vtMal = r.vt && (r.vt.last_analysis_stats?.malicious ?? 0) > 0
+        const otxMal = r.otx && r.otx.status === 'malicious'
+        return abdbMal || vtMal || otxMal
+      }).length
+
+      const renderCombinedCorrelation = () => {
+        const valid = combinedResults.filter((r) => r.abdb || r.vt || r.otx)
+        if (valid.length === 0) return null
+
+        const malC = valid.filter((r) => {
+          return (r.abdb && (r.abdb.abuseConfidenceScore ?? 0) > 75) ||
+                 (r.vt && (r.vt.last_analysis_stats?.malicious ?? 0) > 0) ||
+                 (r.otx && r.otx.status === 'malicious')
+        }).length
+        const countries = [...new Set(valid.flatMap((r) => [
+          r.abdb?.countryCode, r.vt?.country,
+        ].filter(Boolean)))] as string[]
+        const isps = [...new Set(valid.map((r) => r.abdb?.isp).filter(Boolean))] as string[]
+        const domains = [...new Set(valid.map((r) => r.abdb?.domain || r.vt?.rdap_name).filter(Boolean))] as string[]
+        const allPulses = valid.flatMap((r) => (r.otx?.pulses ?? []).map((p: any) => p.name)).filter(Boolean)
+        const uniquePulses = [...new Set(allPulses)] as string[]
+        const threatScore = valid.length > 0 ? Math.round((malC / valid.length) * 100) : 0
+        const scoreColor = threatScore > 60 ? 'badge-error' : threatScore > 20 ? 'badge-warning' : 'badge-success'
+        return (
+          <div class="rounded-lg border border-base-300 bg-base-200/50 p-4 space-y-3">
+            <div class="flex items-center gap-2 flex-wrap">
+              <p class="font-bold text-sm text-base-content/90">🔗 Correlation Analysis</p>
+              <span class={`badge badge-sm font-bold ${scoreColor}`}>Threat Score {threatScore}%</span>
+              <span class="text-xs text-base-content/50">{valid.length} of {combinedResults.length} resolved</span>
+            </div>
+            <div class="flex flex-wrap gap-2 items-center text-xs">
+              <span class="text-base-content/60">Sources queried:</span>
+              {combinedSources.map((s) => <span key={s} class="badge badge-outline badge-xs">{s}</span>)}
+            </div>
+            <div class="flex flex-wrap gap-2 items-center text-xs">
+              <span class="text-base-content/60">Malicious indicators:</span>
+              {malC > 0 && <span class="badge badge-error badge-sm font-bold">{malC}</span>}
+              {malC === 0 && <span class="badge badge-success badge-sm font-bold">0</span>}
+            </div>
+            {countries.length > 0 && (
+              <p class="text-xs">
+                <span class="text-base-content/60 font-semibold">Countries: </span>
+                <span class="font-mono">{countries.join(', ')}</span>
+              </p>
+            )}
+            {isps.length > 0 && (
+              <p class="text-xs">
+                <span class="text-base-content/60 font-semibold">ISPs: </span>
+                <span class="font-mono">{isps.join(' · ')}</span>
+              </p>
+            )}
+            {domains.length > 0 && (
+              <p class="text-xs">
+                <span class="text-base-content/60 font-semibold">Domains: </span>
+                <span class="font-mono">{domains.join(' · ')}</span>
+              </p>
+            )}
+            {uniquePulses.length > 0 && (
+              <p class="text-xs">
+                <span class="text-base-content/60 font-semibold">Shared OTX Pulses: </span>
+                <span class="font-mono">{uniquePulses.slice(0, 5).join(' · ')}{uniquePulses.length > 5 ? ` +${uniquePulses.length - 5} more` : ''}</span>
+              </p>
+            )}
+          </div>
+        )
+      }
+
+      const renderCombinedTable = () => (
+        <table class="table table-xs table-zebra w-full" id="resultsTable">
+          <thead>
+            <tr class="border-base-300">
+              <th rowSpan={2} class="align-middle">Indicator</th>
+              {combinedSources.includes('AbuseIPDB') && <th colSpan={4} class="text-center border-l border-base-300">AbuseIPDB</th>}
+              {combinedSources.includes('VirusTotal') && <th colSpan={3} class="text-center border-l border-base-300">VirusTotal</th>}
+              {combinedSources.includes('OTX Alienvault') && <th colSpan={4} class="text-center border-l border-base-300">OTX Alienvault</th>}
+            </tr>
+            <tr class="border-base-300 text-xs">
+              {combinedSources.includes('AbuseIPDB') && <>
+                <th class="border-l border-base-300">Whitelisted</th><th>Tor</th><th>Abuse Score</th><th>Reports</th>
+              </>}
+              {combinedSources.includes('VirusTotal') && <>
+                <th class="border-l border-base-300">Malicious</th><th>Suspicious</th><th>Harmless</th>
+              </>}
+              {combinedSources.includes('OTX Alienvault') && <>
+                <th class="border-l border-base-300">Status</th><th>Whitelisted</th><th>Reputation</th><th>Pulses</th>
+              </>}
+            </tr>
+          </thead>
+          <tbody>
+            {combinedResults.map((r, idx) => {
+              if (Object.keys(r.errors).length > 0 && !r.abdb && !r.vt && !r.otx) {
+                const errMsg = Object.entries(r.errors).map(([k, v]) => `${k}: ${v}`).join('; ')
+                return (
+                  <tr key={idx} class="hover:bg-base-200/50">
+                    <td class="font-mono text-xs">{r.indicator}</td>
+                    <td colSpan={combinedSources.length > 2 ? 11 : combinedSources.length > 1 ? 7 : 4} class="text-error text-xs">{errMsg}</td>
+                  </tr>
+                )
+              }
+              const abdbScore = r.abdb?.abuseConfidenceScore ?? 0
+              const abdbBadge = abdbScore > 75 ? 'badge-error' : abdbScore > 25 ? 'badge-warning' : 'badge-success'
+              const vtSt = r.vt?.last_analysis_stats ?? {}
+              const otxStatus = r.otx?.status ?? '-'
+              const otxStatusColor = otxStatus === 'malicious' ? 'badge-error' : otxStatus === 'suspicious' ? 'badge-warning' : 'badge-success'
+              const otxRepColor = (r.otx?.reputation ?? 0) < 0 ? 'text-error' : (r.otx?.reputation ?? 0) > 0 ? 'text-success' : 'text-base-content/60'
+              return (
+                <tr key={idx} class="hover:bg-base-200/50">
+                  <td class="font-mono text-xs whitespace-nowrap">{r.indicator}</td>
+                  {combinedSources.includes('AbuseIPDB') && (
+                    r.errors['AbuseIPDB'] ? (
+                      <><td colSpan={4} class="text-error text-xs border-l border-base-300">{r.errors['AbuseIPDB']}</td></>
+                    ) : r.abdb ? (
+                      <>
+                        <td class="text-xs border-l border-base-300">{bv(r.abdb.isWhitelisted)}</td>
+                        <td class="text-xs">{bv(r.abdb.isTor)}</td>
+                        <td><span class={`badge badge-sm font-bold ${abdbBadge}`}>{abdbScore}%</span></td>
+                        <td class="text-xs">{v(r.abdb.totalReports)}</td>
+                      </>
+                    ) : (
+                      <><td colSpan={4} class="text-xs text-base-content/40 italic border-l border-base-300">—</td></>
+                    )
+                  )}
+                  {combinedSources.includes('VirusTotal') && (
+                    r.errors['VirusTotal'] ? (
+                      <><td colSpan={3} class="text-error text-xs border-l border-base-300">{r.errors['VirusTotal']}</td></>
+                    ) : r.vt ? (
+                      <>
+                        <td class="border-l border-base-300"><span class={`badge badge-sm font-bold ${(vtSt.malicious ?? 0) > 0 ? 'badge-error' : 'badge-outline'}`}>{vtSt.malicious ?? 0}</span></td>
+                        <td><span class={`badge badge-sm font-bold ${(vtSt.suspicious ?? 0) > 0 ? 'badge-warning' : 'badge-outline'}`}>{vtSt.suspicious ?? 0}</span></td>
+                        <td><span class={`badge badge-sm font-bold ${(vtSt.harmless ?? 0) > 0 ? 'badge-success' : 'badge-outline'}`}>{vtSt.harmless ?? 0}</span></td>
+                      </>
+                    ) : (
+                      <><td colSpan={3} class="text-xs text-base-content/40 italic border-l border-base-300">—</td></>
+                    )
+                  )}
+                  {combinedSources.includes('OTX Alienvault') && (
+                    r.errors['OTX Alienvault'] ? (
+                      <><td colSpan={4} class="text-error text-xs border-l border-base-300">{r.errors['OTX Alienvault']}</td></>
+                    ) : r.otx ? (
+                      <>
+                        <td class="border-l border-base-300"><span class={`badge badge-sm font-bold ${otxStatusColor}`}>{otxStatus}</span></td>
+                        <td class="text-xs">{bv(r.otx.whitelisted)}</td>
+                        <td class={`text-xs font-semibold ${otxRepColor}`}>{v(r.otx.reputation)}</td>
+                        <td class="text-xs">{v(r.otx.pulse_count)}</td>
+                      </>
+                    ) : (
+                      <><td colSpan={4} class="text-xs text-base-content/40 italic border-l border-base-300">—</td></>
+                    )
+                  )}
+                </tr>
+              )
+            })}
+          </tbody>
+        </table>
+      )
+
       return c.html(
-        <div class="alert alert-error alert-soft">
-          <span>Source {source} is not available yet</span>
+        <div class="space-y-4">
+          <p class="text-sm text-base-content/60">
+            Mode: <span class="font-semibold">{mode}</span> | Sources:{' '}
+            <span class="font-semibold">{source}</span> | Indicators:{' '}
+            <span class="font-semibold">{combinedResults.length}</span>
+          </p>
+
+          <div class="overflow-x-auto rounded-lg border border-base-300">
+            <div class="min-w-max">
+              {renderCombinedTable()}
+            </div>
+          </div>
+
+          {renderCombinedCorrelation()}
+
+          <div class="border border-base-300 rounded-lg p-3 bg-base-200/50 text-xs space-y-1 text-base-content/70">
+            <p class="font-semibold text-base-content/90 mb-1">Audit Information</p>
+            <p>Date Submitted: <span class="font-mono">{submittedAt}</span></p>
+            <p>API Endpoint: <span class="font-mono break-all">{apiUrl}</span></p>
+          </div>
+
+          <div class="flex flex-wrap gap-2">
+            <button class="btn btn-sm btn-outline" id="newCheckBtn">↩ New Check</button>
+            <button class="btn btn-sm btn-outline" id="copyTableBtn">📋 Copy to Clipboard</button>
+            <button class="btn btn-sm btn-outline" id="exportCsvBtn">⬇ Export to CSV</button>
+          </div>
+
+          <script
+            id="resultsData"
+            type="application/json"
+            dangerouslySetInnerHTML={{
+              __html: JSON.stringify({ mode, source, maxAgeInDays, combinedResults, maliciousCount }).replace(/<\/script/gi, '<\\/script'),
+            }}
+          />
         </div>
       )
     }
 
+    // ── SINGLE / BULK MODE ─────────────────────────────────────────────────────
     const results: { indicator: string; source: string; result: any; error?: string }[] = []
 
     for (const indicator of indicators) {
@@ -61,51 +351,6 @@ intelligence.post('/api/check', async (c) => {
           error: err instanceof Error ? err.message : 'Unknown error',
         })
       }
-    }
-
-    // Jakarta time (WIB = UTC+7)
-    const submittedAt =
-      new Date().toLocaleString('en-GB', {
-        timeZone: 'Asia/Jakarta',
-        day: '2-digit',
-        month: 'short',
-        year: 'numeric',
-        hour: '2-digit',
-        minute: '2-digit',
-        second: '2-digit',
-        hour12: false,
-      }) + ' WIB'
-
-    // Audit API URL
-    const apiUrl =
-      source === 'AbuseIPDB'
-        ? `https://api.abuseipdb.com/api/v2/check?maxAgeInDays=${maxAgeInDays}&verbose=1`
-        : source === 'VirusTotal'
-          ? 'https://www.virustotal.com/api/v3/{type}/{indicator}'
-          : 'https://otx.alienvault.com/api/v1/indicators/IPv4/{indicator}/general'
-
-    // Null-safe cell helpers
-    const v = (val: any) => (val !== null && val !== undefined ? String(val) : '-')
-    const bv = (val: any) => (val === null || val === undefined ? '-' : val ? 'Yes' : 'No')
-    const toJakartaTime = (dateStr: string | null | undefined): string => {
-      if (!dateStr) return '-'
-      try {
-        const date = new Date(dateStr)
-        if (isNaN(date.getTime())) return String(dateStr)
-        return date.toLocaleString('en-GB', {
-          timeZone: 'Asia/Jakarta', day: '2-digit', month: 'short', year: 'numeric',
-          hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false,
-        }) + ' WIB'
-      } catch { return String(dateStr) }
-    }
-    const unixToJakartaTime = (ts: number | null | undefined): string => {
-      if (!ts) return '-'
-      try {
-        return new Date(ts * 1000).toLocaleString('en-GB', {
-          timeZone: 'Asia/Jakarta', day: '2-digit', month: 'short', year: 'numeric',
-          hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false,
-        }) + ' WIB'
-      } catch { return '-' }
     }
 
     const renderAbuseIPDBTable = () => (
@@ -152,7 +397,7 @@ intelligence.post('/api/check', async (c) => {
                 <td class="font-mono text-xs">{v(d.ipAddress)}</td>
                 <td class="text-xs">{bv(d.isWhitelisted)}</td>
                 <td class="text-xs">{bv(d.isTor)}</td>
-                <td><span class={`badge badge-sm ${abuseBadge}`}>{abuseScore}%</span></td>
+                <td><span class={`badge badge-sm font-bold ${abuseBadge}`}>{abuseScore}%</span></td>
                 <td class="text-xs">{v(d.totalReports)}</td>
                 <td class="text-xs">{v(d.countryCode)}</td>
                 <td class="text-xs">{v(d.countryName)}</td>
@@ -218,9 +463,9 @@ intelligence.post('/api/check', async (c) => {
             return (
               <tr key={idx} class="hover:bg-base-200/50">
                 <td class="font-mono text-xs">{v(d.id)}</td>
-                <td><span class={`badge badge-sm ${ (st.malicious ?? 0) > 0 ? 'badge-error' : 'badge-outline'}`}>{st.malicious ?? 0}</span></td>
-                <td><span class={`badge badge-sm ${ (st.suspicious ?? 0) > 0 ? 'badge-warning' : 'badge-outline'}`}>{st.suspicious ?? 0}</span></td>
-                <td><span class={`badge badge-sm ${ (st.harmless ?? 0) > 0 ? 'badge-success' : 'badge-outline'}`}>{st.harmless ?? 0}</span></td>
+                <td><span class={`badge badge-sm font-bold ${ (st.malicious ?? 0) > 0 ? 'badge-error' : 'badge-outline'}`}>{st.malicious ?? 0}</span></td>
+                <td><span class={`badge badge-sm font-bold ${ (st.suspicious ?? 0) > 0 ? 'badge-warning' : 'badge-outline'}`}>{st.suspicious ?? 0}</span></td>
+                <td><span class={`badge badge-sm font-bold ${ (st.harmless ?? 0) > 0 ? 'badge-success' : 'badge-outline'}`}>{st.harmless ?? 0}</span></td>
                 <td class="text-xs">{v(d.rdap_name)}</td>
                 <td class="text-xs">{v(d.country)}</td>
                 <td class="text-xs truncate max-w-32" title={v(d.as_owner)}>{v(d.as_owner)}</td>
@@ -231,7 +476,7 @@ intelligence.post('/api/check', async (c) => {
                   {Array.isArray(d.tags) && d.tags.length > 0 ? (d.tags as string[]).join(', ') : '-'}
                 </td>
                 <td class="text-xs truncate max-w-48" title={ctxSummary}>{ctxSummary}</td>
-                <td class="text-xs whitespace-nowrap">{unixToJakartaTime(d.last_analysis_date)}</td>
+                <td class="text-xs whitespace-nowrap">{toJakartaTime(d.last_analysis_date)}</td>
               </tr>
             )
           })}
@@ -278,7 +523,7 @@ intelligence.post('/api/check', async (c) => {
             return (
               <tr key={idx} class="hover:bg-base-200/50">
                 <td class="font-mono text-xs">{v(d.indicator)}</td>
-                <td><span class={`badge badge-sm ${statusColor}`}>{v(d.status)}</span></td>
+                <td><span class={`badge badge-sm font-bold ${statusColor}`}>{v(d.status)}</span></td>
                 <td class="text-xs">{bv(d.whitelisted)}</td>
                 <td class={`text-xs font-semibold ${repColor}`}>{v(d.reputation)}</td>
                 <td class="text-xs">{v(d.pulse_count)}</td>
@@ -290,6 +535,65 @@ intelligence.post('/api/check', async (c) => {
       </table>
     )
 
+    // Compute malicious count for session stats
+    const maliciousCount = results.filter(r => r.result?.status === 'malicious').length
+
+    // Combined Analysis: cross-indicator correlation helpers
+    const renderCorrelation = () => {
+      if (mode !== 'Combined Analysis' || results.length < 1) return null
+      const valid = results.filter(r => r.result && !r.error)
+      if (valid.length === 0) return null
+      const malC = valid.filter(r => r.result.status === 'malicious').length
+      const susC = valid.filter(r => r.result.status === 'suspicious').length
+      const cleanC = valid.filter(r => r.result.status === 'clean').length
+      const countries = [...new Set(valid.map(r => r.result.countryCode || r.result.country).filter(Boolean))] as string[]
+      const isps = [...new Set(valid.map(r => r.result.isp).filter(Boolean))] as string[]
+      const domains = [...new Set(valid.map(r => r.result.domain).filter(Boolean))] as string[]
+      const allPulseNames = valid.flatMap(r => (r.result.pulses ?? []).map((p: any) => p.name)).filter(Boolean) as string[]
+      const uniquePulses = [...new Set(allPulseNames)] as string[]
+      const threatScore = Math.round((malC / valid.length) * 100)
+      const scoreColor = threatScore > 60 ? 'badge-error' : threatScore > 20 ? 'badge-warning' : 'badge-success'
+      return (
+        <div class="rounded-lg border border-base-300 bg-base-200/50 p-4 space-y-3">
+          <div class="flex items-center gap-2 flex-wrap">
+            <p class="font-bold text-sm text-base-content/90">🔗 Correlation Analysis</p>
+            <span class={`badge badge-sm font-bold ${scoreColor}`}>Threat Score {threatScore}%</span>
+            <span class="text-xs text-base-content/50">{valid.length} of {results.length} resolved</span>
+          </div>
+          <div class="flex flex-wrap gap-2 items-center text-xs">
+            <span class="text-base-content/60">Verdicts:</span>
+            {malC > 0 && <span class="badge badge-error badge-sm font-bold">{malC} Malicious</span>}
+            {susC > 0 && <span class="badge badge-warning badge-sm font-bold">{susC} Suspicious</span>}
+            {cleanC > 0 && <span class="badge badge-success badge-sm font-bold">{cleanC} Clean</span>}
+          </div>
+          {countries.length > 0 && (
+            <p class="text-xs">
+              <span class="text-base-content/60 font-semibold">Countries: </span>
+              <span class="font-mono">{countries.join(', ')}</span>
+            </p>
+          )}
+          {isps.length > 0 && (
+            <p class="text-xs">
+              <span class="text-base-content/60 font-semibold">ISPs: </span>
+              <span class="font-mono">{isps.join(' · ')}</span>
+            </p>
+          )}
+          {domains.length > 0 && (
+            <p class="text-xs">
+              <span class="text-base-content/60 font-semibold">Domains: </span>
+              <span class="font-mono">{domains.join(' · ')}</span>
+            </p>
+          )}
+          {uniquePulses.length > 0 && (
+            <p class="text-xs">
+              <span class="text-base-content/60 font-semibold">Shared OTX Pulses: </span>
+              <span class="font-mono">{uniquePulses.slice(0, 5).join(' · ')}{uniquePulses.length > 5 ? ` +${uniquePulses.length - 5} more` : ''}</span>
+            </p>
+          )}
+        </div>
+      )
+    }
+
     return c.html(
       <div class="space-y-4">
         <p class="text-sm text-base-content/60">
@@ -299,12 +603,29 @@ intelligence.post('/api/check', async (c) => {
         </p>
 
         <div class="overflow-x-auto rounded-lg border border-base-300">
+          <div class="min-w-max">
           {source === 'AbuseIPDB'
             ? renderAbuseIPDBTable()
             : source === 'VirusTotal'
               ? renderVirusTotalTable()
               : renderOTXTable()}
+          </div>
         </div>
+
+        {/* Correlation panel — Combined Analysis only */}
+        {renderCorrelation()}
+
+        {/* Single Mode JSON tree — only for exactly 1 result */}
+        {mode === 'Single Mode' && results.length === 1 && results[0].result && (
+          <details open class="group border border-base-300 rounded-lg overflow-hidden">
+            <summary class="flex items-center gap-2 cursor-pointer select-none bg-base-200/50 px-3 py-2 text-sm font-semibold text-base-content/80 hover:bg-base-200 transition-colors list-none">
+              <span class="inline-block transition-transform duration-200 group-open:rotate-90 text-xs">▶</span>
+              Raw JSON Response
+              <span class="badge badge-ghost badge-xs ml-auto">click to collapse</span>
+            </summary>
+            <pre class="text-xs font-mono text-base-content bg-base-300/20 p-4 overflow-x-auto max-h-80 overflow-y-auto border-t border-base-300">{JSON.stringify(results[0].result, null, 2)}</pre>
+          </details>
+        )}
 
         {/* Audit Information */}
         <div class="border border-base-300 rounded-lg p-3 bg-base-200/50 text-xs space-y-1 text-base-content/70">
@@ -318,7 +639,7 @@ intelligence.post('/api/check', async (c) => {
           <button class="btn btn-sm btn-outline" id="newCheckBtn">↩ New Check</button>
           <button class="btn btn-sm btn-outline" id="copyTableBtn">📋 Copy to Clipboard</button>
           <button class="btn btn-sm btn-outline" id="exportCsvBtn">⬇ Export to CSV</button>
-          <button class="btn btn-sm btn-outline" id="copyPtmBtn">🔗 Copy PTM Format</button>
+          <button class="btn btn-sm btn-outline" id="copyPtmBtn">🔗 Copy Formatted IP</button>
         </div>
 
         {/* Hidden JSON payload for client-side button actions */}
@@ -326,7 +647,7 @@ intelligence.post('/api/check', async (c) => {
           id="resultsData"
           type="application/json"
           dangerouslySetInnerHTML={{
-            __html: JSON.stringify({ mode, source, maxAgeInDays, results }).replace(/<\/script/gi, '<\/script'),
+            __html: JSON.stringify({ mode, source, maxAgeInDays, results, maliciousCount }).replace(/<\/script/gi, '<\/script'),
           }}
         />
       </div>
@@ -355,18 +676,30 @@ intelligence.get('/', (c) => {
 
       {/* STATS ROW */}
       <div class="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-4">
-        {[
-          { icon: '📊', title: 'Sources', value: '7', color: 'text-primary' },
-          { icon: '✓', title: 'Checks Today', value: '44', color: 'text-success' },
-          { icon: '⚡', title: 'Avg Speed', value: '1.2s', color: 'text-info' },
-          { icon: '🛡️', title: 'Malicious Found', value: '12', color: 'text-warning' },
-        ].map((s) => (
-          <div key={s.title} class="stat bg-base-100 shadow-md border border-base-300 rounded-lg">
-            <div class="stat-figure text-3xl">{s.icon}</div>
-            <div class="stat-title text-sm opacity-70">{s.title}</div>
-            <div class={`stat-value text-2xl ${s.color}`}>{s.value}</div>
-          </div>
-        ))}
+        <div class="stat bg-base-100 shadow-md border border-base-300 rounded-lg">
+          <div class="stat-figure text-3xl">📊</div>
+          <div class="stat-title text-sm opacity-70">Sources</div>
+          <div class="stat-value text-2xl text-primary">3 of 7</div>
+          <div class="stat-desc text-xs opacity-50">AbuseIPDB, VT, OTX</div>
+        </div>
+        <div class="stat bg-base-100 shadow-md border border-base-300 rounded-lg">
+          <div class="stat-figure text-3xl">✓</div>
+          <div class="stat-title text-sm opacity-70">Checks Today</div>
+          <div id="stat-checks" class="stat-value text-2xl text-success">0</div>
+          <div class="stat-desc text-xs opacity-50">This session</div>
+        </div>
+        <div class="stat bg-base-100 shadow-md border border-base-300 rounded-lg">
+          <div class="stat-figure text-3xl">⚡</div>
+          <div class="stat-title text-sm opacity-70">Avg Speed</div>
+          <div id="stat-speed" class="stat-value text-2xl text-info">—</div>
+          <div class="stat-desc text-xs opacity-50">Per lookup, this session</div>
+        </div>
+        <div class="stat bg-base-100 shadow-md border border-base-300 rounded-lg">
+          <div class="stat-figure text-3xl">🛡️</div>
+          <div class="stat-title text-sm opacity-70">Malicious Found</div>
+          <div id="stat-malicious" class="stat-value text-2xl text-warning">0</div>
+          <div class="stat-desc text-xs opacity-50">This session</div>
+        </div>
       </div>
 
       {/* CHECKER CARD */}
@@ -396,8 +729,8 @@ intelligence.get('/', (c) => {
               <input type="hidden" name="mode" id="modeInput" value="Single Mode" />
             </div>
 
-            {/* SOURCE SELECTOR */}
-            <div class="mb-5">
+            {/* SOURCE SELECTOR — shown for Single/Bulk modes */}
+            <div id="sourceRadioGroup" class="mb-5">
               <label class="label pb-1">
                 <span class="label-text font-semibold">Select Source</span>
               </label>
@@ -430,6 +763,33 @@ intelligence.get('/', (c) => {
                 ))}
               </div>
               <p class="text-xs text-base-content/60 mt-1">More sources coming soon</p>
+            </div>
+
+            {/* COMBINED SOURCES SELECTOR — shown only in Combined Analysis mode */}
+            <div id="sourceCheckboxGroup" class="mb-5 hidden">
+              <label class="label pb-1">
+                <span class="label-text font-semibold">Sources to Query</span>
+                <span class="text-xs text-base-content/60">All selected sources will be queried in parallel</span>
+              </label>
+              <div class="flex flex-wrap gap-3">
+                {[
+                  { value: 'AbuseIPDB', defaultChecked: true },
+                  { value: 'VirusTotal', defaultChecked: true },
+                  { value: 'OTX Alienvault', defaultChecked: true },
+                ].map((s) => (
+                  <label key={s.value} class="flex items-center gap-2 p-2 rounded cursor-pointer hover:bg-base-200 transition-colors">
+                    <input
+                      type="checkbox"
+                      name="sources"
+                      value={s.value}
+                      checked={s.defaultChecked}
+                      class="checkbox checkbox-primary checkbox-sm"
+                    />
+                    <span class="text-sm font-medium">{s.value}</span>
+                  </label>
+                ))}
+              </div>
+              <p class="text-xs text-base-content/60 mt-1">Results appear in a unified table per indicator</p>
             </div>
 
             {/* MAX AGE IN DAYS — only visible for AbuseIPDB */}
@@ -477,60 +837,57 @@ intelligence.get('/', (c) => {
 
       {/* MODE INFO CARDS */}
       <div class="grid gap-4 grid-cols-1 md:grid-cols-3">
-        {[
-          {
-            icon: '1️⃣',
-            title: 'Single Mode',
-            desc: 'Check one indicator quickly',
-            label: 'Supports',
-            items: [
-              'IPv4 & IPv6 addresses',
-              'Domains & subdomains',
-              'URLs & file paths',
-              'File hashes (MD5, SHA-1, SHA-256)',
-            ],
-          },
-          {
-            icon: '📋',
-            title: 'Bulk Mode',
-            desc: 'Check multiple indicators at once',
-            label: 'Limits',
-            items: [
-              'Up to 100 indicators',
-              'One per line',
-              'Mixed types supported',
-              'Results exported to CSV',
-            ],
-          },
-          {
-            icon: '🔗',
-            title: 'Advanced',
-            desc: 'Correlate & analyze together',
-            label: 'Features',
-            items: [
-              'Up to 10 indicators',
-              'Correlation analysis',
-              'Campaign tracking',
-              'Report generation',
-            ],
-          },
-        ].map((card) => (
-          <div key={card.title} class="card bg-base-100 shadow-md border border-base-300">
-            <div class="card-body">
-              <h2 class="card-title text-lg">
-                <span class="text-3xl">{card.icon}</span>
-                {card.title}
-              </h2>
-              <p class="text-sm text-base-content/70">{card.desc}</p>
-              <p class="text-xs font-semibold mt-2">{card.label}:</p>
-              <ul class="text-xs space-y-1 list-disc list-inside opacity-70">
-                {card.items.map((item) => (
-                  <li key={item}>{item}</li>
-                ))}
-              </ul>
-            </div>
+        <div id="modeCard-single" class="card bg-base-100 shadow-md border border-base-300">
+          <div class="card-body">
+            <h2 class="card-title text-lg">
+              <span class="text-3xl">1️⃣</span>
+              Single Mode
+            </h2>
+            <p class="text-sm text-base-content/70">Check one indicator at a time with full detail view</p>
+            <p class="text-xs font-semibold mt-2">Supports:</p>
+            <ul class="text-xs space-y-1 list-disc list-inside opacity-70">
+              <li>IPv4 & IPv6 addresses</li>
+              <li>Domains & subdomains</li>
+              <li>URLs & file paths</li>
+              <li>File hashes (MD5, SHA-1, SHA-256)</li>
+            </ul>
+            <p id="modeCardHint-single" class="text-xs mt-2 text-primary font-semibold">Expands raw JSON below results</p>
           </div>
-        ))}
+        </div>
+        <div id="modeCard-bulk" class="card bg-base-100 shadow-md border border-base-300">
+          <div class="card-body">
+            <h2 class="card-title text-lg">
+              <span class="text-3xl">📋</span>
+              Bulk Mode
+            </h2>
+            <p class="text-sm text-base-content/70">Check multiple indicators at once in a table</p>
+            <p class="text-xs font-semibold mt-2">Limits:</p>
+            <ul class="text-xs space-y-1 list-disc list-inside opacity-70">
+              <li>Up to 100 indicators</li>
+              <li>One per line in textarea</li>
+              <li>Mixed types supported</li>
+              <li>Export to CSV available</li>
+            </ul>
+            <p id="modeCardHint-bulk" class="text-xs mt-2 text-base-content/40">Auto-detected when &gt;1 line</p>
+          </div>
+        </div>
+        <div id="modeCard-combined" class="card bg-base-100 shadow-md border border-base-300">
+          <div class="card-body">
+            <h2 class="card-title text-lg">
+              <span class="text-3xl">🔗</span>
+              Combined Analysis
+            </h2>
+            <p class="text-sm text-base-content/70">Cross-correlate multiple indicators together</p>
+            <p class="text-xs font-semibold mt-2">Features:</p>
+            <ul class="text-xs space-y-1 list-disc list-inside opacity-70">
+              <li>Threat score across indicators</li>
+              <li>Shared country / ISP / domain</li>
+              <li>OTX pulse overlap detection</li>
+              <li>Up to 20 indicators</li>
+            </ul>
+            <p id="modeCardHint-combined" class="text-xs mt-2 text-base-content/40">Select manually above</p>
+          </div>
+        </div>
       </div>
 
       {/* HELP ALERT */}
@@ -558,11 +915,22 @@ intelligence.get('/', (c) => {
       btn.classList.toggle('btn-primary', active);
       btn.classList.toggle('btn-outline', !active);
     });
+    var isCombined = mode === 'Combined Analysis';
+    var radioGroup = document.getElementById('sourceRadioGroup');
+    var checkboxGroup = document.getElementById('sourceCheckboxGroup');
+    if (radioGroup) radioGroup.style.display = isCombined ? 'none' : '';
+    if (checkboxGroup) checkboxGroup.classList.toggle('hidden', !isCombined);
+    updateMaxAgeVisibility();
   }
 
   function updateModeFromInput() {
     var lines = document.getElementById('indicatorsInput').value.trim().split('\\n').filter(function (l) { return l.trim(); });
-    setMode(lines.length <= 1 ? 'Single Mode' : 'Bulk Mode');
+    var currentMode = document.getElementById('modeInput').value;
+    if (currentMode !== 'Combined Analysis') {
+      setMode(lines.length <= 1 ? 'Single Mode' : 'Bulk Mode');
+    }
+    var singleBtn = document.querySelector('.modeBtn[data-mode="Single Mode"]');
+    if (singleBtn) singleBtn.disabled = lines.length > 1;
   }
 
   document.querySelectorAll('.modeBtn').forEach(function (btn) {
@@ -575,8 +943,9 @@ intelligence.get('/', (c) => {
   function updateMaxAgeVisibility() {
     var source = document.querySelector('input[name="source"]:checked');
     var container = document.getElementById('maxAgeContainer');
+    var isCombined = document.getElementById('modeInput').value === 'Combined Analysis';
     if (container) {
-      container.style.display = (source && source.value === 'AbuseIPDB') ? '' : 'none';
+      container.style.display = (!isCombined && source && source.value === 'AbuseIPDB') ? '' : 'none';
     }
   }
 
@@ -590,10 +959,37 @@ intelligence.get('/', (c) => {
     event.preventDefault();
     var resultsArea = document.getElementById('resultsArea');
     resultsArea.innerHTML = '<div class="flex justify-center py-6"><span class="loading loading-spinner loading-lg"></span></div>';
+    var t0 = Date.now();
     try {
       var response = await fetch('/intelligence/api/check', { method: 'POST', body: new FormData(event.target) });
       var html = await response.text();
+      var elapsed = (Date.now() - t0) / 1000;
       resultsArea.innerHTML = html;
+
+      // checks count
+      var checks = parseInt(sessionStorage.getItem('intel_checks') || '0') + 1;
+      sessionStorage.setItem('intel_checks', String(checks));
+      var ec = document.getElementById('stat-checks'); if (ec) ec.textContent = String(checks);
+
+      // avg speed
+      var speeds = []; try { speeds = JSON.parse(sessionStorage.getItem('intel_speeds') || '[]'); } catch(e) {}
+      speeds.push(parseFloat(elapsed.toFixed(2)));
+      if (speeds.length > 20) speeds = speeds.slice(-20);
+      sessionStorage.setItem('intel_speeds', JSON.stringify(speeds));
+      var avgSpeed = (speeds.reduce(function(a,b){return a+b;},0)/speeds.length).toFixed(1);
+      var es = document.getElementById('stat-speed'); if (es) es.textContent = avgSpeed + 's';
+
+      // malicious count from embedded payload
+      var rdEl = resultsArea.querySelector('#resultsData');
+      if (rdEl) {
+        try {
+          var rd = JSON.parse(rdEl.textContent || '{}');
+          var newMal = parseInt(sessionStorage.getItem('intel_malicious') || '0') + (rd.maliciousCount || 0);
+          sessionStorage.setItem('intel_malicious', String(newMal));
+          var em = document.getElementById('stat-malicious'); if (em) em.textContent = String(newMal);
+        } catch(e) {}
+      }
+
       attachResultHandlers();
     } catch (err) {
       resultsArea.innerHTML = '<div class="alert alert-error alert-soft"><span>Error: ' + err.message + '</span></div>';
@@ -612,6 +1008,7 @@ intelligence.get('/', (c) => {
         resultsArea.innerHTML = '<div class="alert alert-info alert-soft"><span>Ready for new check</span></div>';
         var inp = document.getElementById('indicatorsInput');
         inp.value = '';
+        updateModeFromInput();
         inp.focus();
       });
     }
@@ -658,7 +1055,7 @@ intelligence.get('/', (c) => {
       });
     }
 
-    // Copy PTM format: (IP (Hostname,countryCode), ...
+    // Copy Formatted IP: (IP (Hostname, CC), ...
     var copyPtmBtn = resultsArea.querySelector('#copyPtmBtn');
     if (copyPtmBtn) {
       copyPtmBtn.addEventListener('click', function () {
@@ -684,13 +1081,27 @@ intelligence.get('/', (c) => {
             return '(' + ip + ' (' + hostname + ',' + cc + ')';
           }).filter(Boolean);
           navigator.clipboard.writeText(' ' + entries.join(', ')).then(function () {
-            copyPtmBtn.textContent = '\\u2713 Copied PTM!';
-            setTimeout(function () { copyPtmBtn.textContent = '\\uD83D\\uDD17 Copy PTM Format'; }, 2000);
+            copyPtmBtn.textContent = '\\u2713 Copied!';
+            setTimeout(function () { copyPtmBtn.textContent = '\\uD83D\\uDD17 Copy Formatted IP'; }, 2000);
           });
-        } catch (e) { console.error('PTM copy failed', e); }
+        } catch (e) { console.error('Copy Formatted IP failed', e); }
       });
     }
   }
+  // ── Load session stats on init ───────────────────────────────────────────────
+  (function loadSessionStats() {
+    var checks = sessionStorage.getItem('intel_checks');
+    var ec = document.getElementById('stat-checks'); if (ec && checks) ec.textContent = checks;
+    var speeds = []; try { speeds = JSON.parse(sessionStorage.getItem('intel_speeds') || '[]'); } catch(e) {}
+    var es = document.getElementById('stat-speed');
+    if (es && speeds.length > 0) {
+      var avg = (speeds.reduce(function(a,b){return a+b;},0)/speeds.length).toFixed(1);
+      es.textContent = avg + 's';
+    }
+    var mal = sessionStorage.getItem('intel_malicious');
+    var em = document.getElementById('stat-malicious'); if (em && mal) em.textContent = mal;
+  })();
+
 })();
           `,
         }}

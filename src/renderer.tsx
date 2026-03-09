@@ -42,7 +42,7 @@ export const renderer = jsxRenderer(({ children, title }: any, c: any) => {
             {/* NAVBAR */}
             <div class="navbar bg-base-100 border-b border-base-300 shadow-md sticky top-0 z-40">
 
-              <div class="flex-none lg:hidden">
+              <div class="flex-none">
                 <label for="sidebar" class="btn btn-square btn-ghost btn-lg">
                   ☰
                 </label>
@@ -180,16 +180,16 @@ export const renderer = jsxRenderer(({ children, title }: any, c: any) => {
 
 
           {/* SIDEBAR */}
-          <div class="drawer-side">
-            <label for="sidebar" class="drawer-overlay"></label>
+          <div class="drawer-side is-drawer-close:overflow-visible">
+            <label for="sidebar" aria-label="close sidebar" class="drawer-overlay"></label>
 
-            <aside class="w-72 bg-base-100 border-r border-base-300 flex flex-col h-screen">
+            <div class="is-drawer-close:w-14 is-drawer-open:w-64 bg-base-100 border-r border-base-300 flex flex-col h-screen overflow-hidden transition-[width] duration-300">
 
               {/* SIDEBAR HEADER */}
               <div class="p-3 border-b border-base-300 shrink-0">
-                <div class="flex items-center gap-2">
-                  <div class="badge badge-primary badge-md">◆</div>
-                  <div>
+                <div class="flex items-center gap-2 overflow-hidden">
+                  <div class="badge badge-primary badge-md shrink-0">◆</div>
+                  <div class="is-drawer-close:hidden whitespace-nowrap">
                     <div class="font-bold text-primary text-sm leading-tight">
                       Project-K
                     </div>
@@ -207,78 +207,80 @@ export const renderer = jsxRenderer(({ children, title }: any, c: any) => {
                   <li>
                     <a
                       {...{ 'hx-get': '/', 'hx-target': '#page-content', 'hx-push-url': 'true', 'hx-swap': 'innerHTML' }}
-                      class="h-12 hover:bg-primary/20 nav-link"
+                      class="h-12 hover:bg-primary/20 nav-link is-drawer-close:tooltip is-drawer-close:tooltip-right"
                       data-path="/"
+                      data-tip="Dashboard"
                     >
                       <span class="text-xl">📊</span>
-                      <span class="text-base font-semibold">Dashboard</span>
+                      <span class="text-base font-semibold is-drawer-close:hidden">Dashboard</span>
                     </a>
                   </li>
 
                   <li>
                     <a
                       {...{ 'hx-get': '/intelligence', 'hx-target': '#page-content', 'hx-push-url': 'true', 'hx-swap': 'innerHTML' }}
-                      class="h-12 hover:bg-primary/20 nav-link"
+                      class="h-12 hover:bg-primary/20 nav-link is-drawer-close:tooltip is-drawer-close:tooltip-right"
                       data-path="/intelligence"
+                      data-tip="Intelligence"
                     >
                       <span class="text-xl">🔍</span>
-                      <span class="text-base font-semibold">Intelligence</span>
+                      <span class="text-base font-semibold is-drawer-close:hidden">Intelligence</span>
                     </a>
                   </li>
 
                   <li class="menu-disabled opacity-60 cursor-not-allowed">
-                    <a class="h-12" tabindex={-1} aria-disabled="true">
+                    <a class="h-12 is-drawer-close:tooltip is-drawer-close:tooltip-right" data-tip="Whois" tabindex={-1} aria-disabled="true">
                       <span class="text-xl">🌐</span>
-                      <span class="text-base font-semibold">Whois</span>
+                      <span class="text-base font-semibold is-drawer-close:hidden">Whois</span>
                     </a>
                   </li>
 
                   <li class="menu-disabled opacity-60 cursor-not-allowed">
-                    <a class="h-12" tabindex={-1} aria-disabled="true">
+                    <a class="h-12 is-drawer-close:tooltip is-drawer-close:tooltip-right" data-tip="NMAP / RustScan" tabindex={-1} aria-disabled="true">
                       <span class="text-xl">🔎</span>
-                      <span class="text-base font-semibold">NMAP / RustScan</span>
+                      <span class="text-base font-semibold is-drawer-close:hidden">NMAP / RustScan</span>
                     </a>
                   </li>
 
                   <li class="menu-disabled opacity-60 cursor-not-allowed">
-                    <a class="h-12" tabindex={-1} aria-disabled="true">
+                    <a class="h-12 is-drawer-close:tooltip is-drawer-close:tooltip-right" data-tip="HTTP Proxy" tabindex={-1} aria-disabled="true">
                       <span class="text-xl">📡</span>
-                      <span class="text-base font-semibold">HTTP Proxy</span>
+                      <span class="text-base font-semibold is-drawer-close:hidden">HTTP Proxy</span>
                     </a>
                   </li>
 
                   <li class="menu-disabled opacity-60 cursor-not-allowed">
-                    <a class="h-12" tabindex={-1} aria-disabled="true">
+                    <a class="h-12 is-drawer-close:tooltip is-drawer-close:tooltip-right" data-tip="MISP" tabindex={-1} aria-disabled="true">
                       <span class="text-xl">🧩</span>
-                      <span class="text-base font-semibold">MISP</span>
+                      <span class="text-base font-semibold is-drawer-close:hidden">MISP</span>
                     </a>
                   </li>
 
                   <li class="menu-disabled opacity-60 cursor-not-allowed">
-                    <a class="h-12" tabindex={-1} aria-disabled="true">
+                    <a class="h-12 is-drawer-close:tooltip is-drawer-close:tooltip-right" data-tip="Report Utility" tabindex={-1} aria-disabled="true">
                       <span class="text-xl">📋</span>
-                      <span class="text-base font-semibold">Report Utility</span>
+                      <span class="text-base font-semibold is-drawer-close:hidden">Report Utility</span>
                     </a>
                   </li>
 
                   <li class="menu-disabled opacity-60 cursor-not-allowed">
-                    <a class="h-12" tabindex={-1} aria-disabled="true">
+                    <a class="h-12 is-drawer-close:tooltip is-drawer-close:tooltip-right" data-tip="Audit Log" tabindex={-1} aria-disabled="true">
                       <span class="text-xl">📜</span>
-                      <span class="text-base font-semibold">Audit Log</span>
+                      <span class="text-base font-semibold is-drawer-close:hidden">Audit Log</span>
                     </a>
                   </li>
 
                   <li class="menu-disabled opacity-60 cursor-not-allowed">
-                    <a class="h-12" tabindex={-1} aria-disabled="true">
+                    <a class="h-12 is-drawer-close:tooltip is-drawer-close:tooltip-right" data-tip="Health" tabindex={-1} aria-disabled="true">
                       <span class="text-xl">⚕️</span>
-                      <span class="text-base font-semibold">Health</span>
+                      <span class="text-base font-semibold is-drawer-close:hidden">Health</span>
                     </a>
                   </li>
 
                   <li class="menu-disabled opacity-60 cursor-not-allowed">
-                    <a class="h-12" tabindex={-1} aria-disabled="true">
+                    <a class="h-12 is-drawer-close:tooltip is-drawer-close:tooltip-right" data-tip="Configuration" tabindex={-1} aria-disabled="true">
                       <span class="text-xl">⚙️</span>
-                      <span class="text-base font-semibold">Configuration</span>
+                      <span class="text-base font-semibold is-drawer-close:hidden">Configuration</span>
                     </a>
 
                   </li>
@@ -289,23 +291,30 @@ export const renderer = jsxRenderer(({ children, title }: any, c: any) => {
               {/* SIDEBAR FOOTER */}
               <div class="border-t border-base-300 p-2.5 space-y-1.5 mt-auto shrink-0">
                 {/* STATUS INDICATOR */}
-                <div class="badge badge-md badge-outline w-full gap-1 text-xs">
+                <div class="badge badge-md badge-outline w-full gap-1 text-xs is-drawer-close:hidden">
                   <span class="status status-success status-xs"></span>
                   All Systems OK
                 </div>
 
                 {/* ACTION BUTTON */}
-                <button class="btn btn-primary btn-sm w-full">
+                <button class="btn btn-primary btn-sm w-full is-drawer-close:hidden">
                   💬 Report
                 </button>
 
                 {/* HELP LINK */}
-                <a class="link link-hover text-xs opacity-50 block text-center">
+                <a class="link link-hover text-xs opacity-50 block text-center is-drawer-close:hidden">
                   Help
                 </a>
+
+                {/* SIDEBAR TOGGLE */}
+                <div class="is-drawer-close:tooltip is-drawer-close:tooltip-right" data-tip="Expand Sidebar">
+                  <label for="sidebar" class="btn btn-ghost btn-sm w-full flex items-center justify-center drawer-button cursor-pointer">
+                    ↔
+                  </label>
+                </div>
               </div>
 
-            </aside>
+            </div>
           </div>
 
         </div>
