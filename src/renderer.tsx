@@ -52,7 +52,7 @@ export const renderer = jsxRenderer(({ children, title }: any, c: any) => {
                 <div class="breadcrumbs text-sm">
                   <ul>
                     <li><a href="/" class="link link-hover">Home</a></li>
-                    <li><a href="/" class="link link-hover">Dashboard</a></li>
+                    <li><a href="/" class="link link-hover">News Hub</a></li>
                     <li><span id="breadcrumb-current" class="text-primary font-semibold">{title ?? 'Overview'}</span></li>
                   </ul>
                 </div>
@@ -209,10 +209,22 @@ export const renderer = jsxRenderer(({ children, title }: any, c: any) => {
                       {...{ 'hx-get': '/', 'hx-target': '#page-content', 'hx-push-url': 'true', 'hx-swap': 'innerHTML' }}
                       class="h-12 hover:bg-primary/20 nav-link is-drawer-close:tooltip is-drawer-close:tooltip-right"
                       data-path="/"
-                      data-tip="Dashboard"
+                      data-tip="News Hub"
+                    >
+                      <span class="text-xl">📰</span>
+                      <span class="text-base font-semibold is-drawer-close:hidden">News Hub</span>
+                    </a>
+                  </li>
+
+                  <li>
+                    <a
+                      {...{ 'hx-get': '/dashboard-mock', 'hx-target': '#page-content', 'hx-push-url': 'true', 'hx-swap': 'innerHTML' }}
+                      class="h-12 hover:bg-primary/20 nav-link is-drawer-close:tooltip is-drawer-close:tooltip-right"
+                      data-path="/dashboard-mock"
+                      data-tip="Dashboard - Mock"
                     >
                       <span class="text-xl">📊</span>
-                      <span class="text-base font-semibold is-drawer-close:hidden">Dashboard</span>
+                      <span class="text-base font-semibold is-drawer-close:hidden">Dashboard - Mock</span>
                     </a>
                   </li>
 

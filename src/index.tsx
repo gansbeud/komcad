@@ -1,373 +1,335 @@
 import { Hono } from 'hono'
 import { renderer } from './renderer'
+import { fetchAllNews } from './lib/rss'
+import intelligenceRoutes from './routes/intelligence'
+import dashboardMock from './routes/dashboard-mock'
 
 const app = new Hono()
 
 app.use('*', renderer)
 
+// ── JSON API — fetches RSS feeds server-side and returns structured news ──────
+app.get('/api/news', async (c) => {
+  try {
+    const items = await fetchAllNews()
+    return c.json(items)
+  } catch (err) {
+    return c.json({ error: err instanceof Error ? err.message : 'Failed to fetch news' }, 500)
+  }
+})
+
+// ── Main route — Cybersecurity News Hub ──────────────────────────────────────
 app.get('/', (c) => {
   return c.render(
-    <div class="space-y-6">
-      {/* HERO ALERT WITH CLOSE */}
-      <div class="alert alert-error alert-soft shadow-lg border border-error/30">
-        <div class="flex items-start justify-between w-full">
-          <div class="flex items-start gap-3">
-            <span class="text-2xl">🚨</span>
-            <div>
-              <h3 class="font-bold">Critical Threat Active</h3>
-              <p class="text-sm opacity-90">DDoS attack detected on primary gateway - Response team notified</p>
-            </div>
-          </div>
-          <button class="btn btn-xs btn-ghost">✕</button>
+    <div class="space-y-5" id="news-hub">
+
+      {/* ── HEADER ── */}
+      <div class="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h1 class="text-xl font-bold flex items-center gap-2">
+            📰 <span>Cybersecurity News Hub</span>
+          </h1>
+          <p class="text-xs opacity-50 mt-0.5">Single Pane of Glass — Real-time aggregation from top security sources</p>
+        </div>
+        <div class="flex items-center gap-2 flex-wrap">
+          <span class="text-xs opacity-40 italic" id="news-last-updated">Initialising…</span>
+          <button id="news-refresh-btn" class="btn btn-xs btn-outline gap-1">🔄 Refresh</button>
         </div>
       </div>
 
-      {/* TOP STATS WITH ANIMATIONS */}
-      <div class="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 mb-2">
-        {[
-          { icon: '🎯', title: 'Threats Detected', value: '247', desc: '↗ 12% from last week', color: 'error', trend: 'up', goodTrend: false },
-          { icon: '✓', title: 'Blocked Attacks', value: '1,284', desc: '↗ 5.2% from last week', color: 'success', trend: 'up', goodTrend: true },
-          { icon: '⚠️', title: 'Vulnerabilities', value: '42', desc: '↘ 3 patched this week', color: 'warning', trend: 'down', goodTrend: false },
-          { icon: '📡', title: 'Network Uptime', value: '99.8%', desc: '↗ 0.1% from last month', color: 'info', trend: 'up', goodTrend: true }
-        ].map((stat) => (
-          <div key={stat.title} class="card bg-base-100 shadow-md hover:shadow-lg transition-all duration-300 border border-base-300 hover:border-base-400">
-            <div class="card-body p-4">
-              <div class="flex justify-between items-start">
-                <div>
-                  <div class="text-4xl mb-2">{stat.icon}</div>
-                  <h3 class="text-xs font-bold opacity-70 uppercase">{stat.title}</h3>
-                  <div class={`text-3xl font-bold mt-1 text-${stat.color}`}>{stat.value}</div>
-                </div>
-                <div class={`badge badge-outline text-xs ${ (stat.trend === 'up') === stat.goodTrend ? 'badge-success' : 'badge-error' }`}>
-                  {stat.desc}
-                </div>
+      {/* ── SOURCE STAT MINI-CARDS ── */}
+      <div class="grid grid-cols-3 sm:grid-cols-5 gap-2" id="source-stats">
+        {['🔐','💻','🕵️','🔒','📡'].map((icon) => (
+          <div key={icon} class="skeleton h-16 rounded-lg"></div>
+        ))}
+      </div>
+
+      {/* ── FILTER BAR ── */}
+      <div class="flex flex-wrap gap-2 items-center">
+        <select id="filter-source" class="select select-sm w-auto min-w-40">
+          <option value="">All Sources</option>
+          <option>The Hacker News</option>
+          <option>BleepingComputer</option>
+          <option>Dark Reading</option>
+          <option>Krebs on Security</option>
+          <option>SANS ISC</option>
+        </select>
+        <select id="filter-level" class="select select-sm w-auto min-w-36">
+          <option value="">All Levels</option>
+          <option>Critical</option>
+          <option>High</option>
+          <option>Medium</option>
+          <option>Info</option>
+        </select>
+        <span class="badge badge-outline badge-sm" id="news-count">Loading…</span>
+        <span id="news-cache-badge" class="hidden badge badge-success badge-sm badge-soft">⚡ Cached</span>
+      </div>
+
+      {/* ── NEWS GRID (skeleton placeholders) ── */}
+      <div id="news-grid" class="grid gap-4 grid-cols-1 md:grid-cols-2 xl:grid-cols-3">
+        {[1,2,3,4,5,6].map((i) => (
+          <div key={i} class="card bg-base-100 border border-base-300 shadow-sm">
+            <div class="card-body gap-3 p-4">
+              <div class="skeleton h-3 w-1/3 rounded"></div>
+              <div class="skeleton h-5 w-full rounded"></div>
+              <div class="skeleton h-3 w-1/4 rounded"></div>
+              <div class="skeleton h-14 w-full rounded"></div>
+              <div class="flex gap-2 mt-1">
+                <div class="skeleton h-6 w-20 rounded"></div>
+                <div class="skeleton h-6 w-14 rounded"></div>
               </div>
             </div>
           </div>
         ))}
       </div>
 
-      {/* MAIN CHARTS SECTION */}
-      <div class="grid gap-6 grid-cols-1 lg:grid-cols-3 mb-6">
-        {/* THREAT TIMELINE CHART */}
-        <div class="card bg-base-100 shadow-md border border-base-300 lg:col-span-2">
-          <div class="card-body">
-            <div class="flex justify-between items-center mb-4">
-              <div>
-                <h2 class="card-title">Threat Detection Timeline</h2>
-                <p class="text-sm opacity-60">Last 24 hours threat detection activity</p>
-              </div>
-              <div class="tabs tabs-boxed bg-base-200">
-                <button class="tab tab-active tab-sm">24H</button>
-                <button class="tab tab-sm">7D</button>
-                <button class="tab tab-sm">30D</button>
-              </div>
-            </div>
-            
-            {/* Triple-line chart: Malicious / Suspicious / Blocked — random data each page load */}
-            <div class="h-72 rounded-lg overflow-hidden bg-base-200 relative">
-              <canvas id="threatTimelineChart" style="width:100%;height:100%;display:block;"></canvas>
-            </div>
+      {/* ── CLIENT-SIDE NEWS ENGINE ── */}
+      <script dangerouslySetInnerHTML={{ __html: `
+(function () {
+  'use strict';
 
-            <div class="stats stats-vertical md:stats-horizontal bg-base-200/50 mt-4 rounded-lg">
-              <div class="stat">
-                <div class="stat-title text-xs">Avg Malicious/hr</div>
-                <div class="stat-value text-error text-2xl" id="tl-statAvg">—</div>
-              </div>
-              <div class="stat">
-                <div class="stat-title text-xs">Peak Malicious</div>
-                <div class="stat-value text-warning text-2xl" id="tl-statPeak">—</div>
-              </div>
-              <div class="stat">
-                <div class="stat-title text-xs">Total Events 24H</div>
-                <div class="stat-value text-info text-2xl" id="tl-statTotal">—</div>
-              </div>
-            </div>
-            <script dangerouslySetInnerHTML={{ __html: `
-(function(){
-  function drawChart(){
-    var canvas = document.getElementById('threatTimelineChart');
-    if(!canvas) return;
-    var dpr = window.devicePixelRatio || 1;
-    var rect = canvas.getBoundingClientRect();
-    if(!rect.width || !rect.height) return;
-    canvas.width = rect.width * dpr;
-    canvas.height = rect.height * dpr;
-    var ctx = canvas.getContext('2d');
-    ctx.scale(dpr, dpr);
-    var W = rect.width, H = rect.height;
-    var N = 24;
-    function rand(max, base){ return Array.from({length:N}, function(){ return Math.floor(Math.random()*max)+base; }); }
-    var series = [
-      { label:'Malicious',  color:'#ef4444', fill:'rgba(239,68,68,0.09)',   data: rand(45, 2)  },
-      { label:'Suspicious', color:'#f59e0b', fill:'rgba(245,158,11,0.09)',  data: rand(35, 8)  },
-      { label:'Blocked',    color:'#22c55e', fill:'rgba(34,197,94,0.09)',   data: rand(65, 15) }
-    ];
-    var allVals = series.reduce(function(a,s){ return a.concat(s.data); }, []);
-    var maxV = Math.max.apply(null, allVals) || 1;
-    var pT=24, pB=36, pL=40, pR=16;
-    var cW=W-pL-pR, cH=H-pT-pB;
-    // grid
-    ctx.strokeStyle = 'rgba(128,128,128,0.15)';
-    ctx.lineWidth = 1;
-    for(var g=0;g<=4;g++){
-      var gy = pT + (cH/4)*g;
-      ctx.beginPath(); ctx.moveTo(pL,gy); ctx.lineTo(pL+cW,gy); ctx.stroke();
-      ctx.fillStyle = 'rgba(128,128,128,0.6)';
-      ctx.font = '9px sans-serif'; ctx.textAlign = 'right';
-      ctx.fillText(Math.round(maxV - (maxV/4)*g), pL-4, gy+3);
-    }
-    // x-axis hour labels
-    ctx.fillStyle = 'rgba(128,128,128,0.6)';
-    ctx.font = '9px sans-serif'; ctx.textAlign = 'center';
-    [0,4,8,12,16,20,23].forEach(function(i){
-      var x = pL + (cW/(N-1))*i;
-      ctx.fillText((i<10?'0':'')+i+':00', x, H-6);
-    });
-    // draw each series (area fill then line)
-    series.forEach(function(s){
-      ctx.beginPath();
-      s.data.forEach(function(val,i){ var x=pL+(cW/(N-1))*i, y=pT+cH-(val/maxV)*cH; if(i===0) ctx.moveTo(x,y); else ctx.lineTo(x,y); });
-      ctx.lineTo(pL+cW, pT+cH); ctx.lineTo(pL, pT+cH); ctx.closePath();
-      ctx.fillStyle = s.fill; ctx.fill();
-      ctx.beginPath();
-      s.data.forEach(function(val,i){ var x=pL+(cW/(N-1))*i, y=pT+cH-(val/maxV)*cH; if(i===0) ctx.moveTo(x,y); else ctx.lineTo(x,y); });
-      ctx.strokeStyle = s.color; ctx.lineWidth = 2; ctx.lineJoin = 'round'; ctx.stroke();
-    });
-    // legend
-    series.forEach(function(s,i){
-      var lx = pL + i*95, ly = pT+2;
-      ctx.fillStyle = s.color; ctx.fillRect(lx, ly, 14, 3);
-      ctx.fillStyle = 'rgba(128,128,128,0.8)';
-      ctx.font = '10px sans-serif'; ctx.textAlign = 'left';
-      ctx.fillText(s.label, lx+18, ly+4);
-    });
-    // update stat cards
-    var malData = series[0].data;
-    var avg = Math.round(malData.reduce(function(a,b){return a+b;},0)/malData.length);
-    var peak = Math.max.apply(null, malData);
-    var total = allVals.reduce(function(a,b){return a+b;},0);
-    var e1=document.getElementById('tl-statAvg'), e2=document.getElementById('tl-statPeak'), e3=document.getElementById('tl-statTotal');
-    if(e1) e1.textContent = avg+'/hr';
-    if(e2) e2.textContent = String(peak);
-    if(e3) e3.textContent = String(total);
+  /* ── constants ──────────────────────────────────────── */
+  var CACHE_KEY    = 'komcad_news_v1';
+  var CACHE_TS_KEY = 'komcad_news_ts';
+  var TTL_MS       = 30 * 60 * 1000; // 30 minutes
+
+  var THREAT_BADGE = { Critical:'badge-error', High:'badge-warning', Medium:'badge-info', Info:'badge-ghost' };
+  var THREAT_ICON  = { Critical:'🔴', High:'🟠', Medium:'🔵', Info:'⚪' };
+  var SOURCE_COLOR = {
+    'The Hacker News'  :'text-error',
+    'BleepingComputer' :'text-warning',
+    'Dark Reading'     :'text-info',
+    'Krebs on Security':'text-success',
+    'SANS ISC'         :'text-secondary'
+  };
+
+  var allNews = [];
+
+  /* ── helpers ─────────────────────────────────────────── */
+  function esc(s) {
+    return String(s)
+      .replace(/&/g,'&amp;').replace(/</g,'&lt;')
+      .replace(/>/g,'&gt;').replace(/"/g,'&quot;');
   }
-  if(document.readyState==='loading') document.addEventListener('DOMContentLoaded', drawChart); else drawChart();
-  window.addEventListener('resize', drawChart);
+  function relTime(iso) {
+    var d = Date.now() - new Date(iso).getTime();
+    if (d < 0) return 'just now';
+    var m = Math.floor(d / 60000);
+    if (m < 1)  return 'just now';
+    if (m < 60) return m + ' min' + (m > 1 ? 's' : '') + ' ago';
+    var h = Math.floor(m / 60);
+    if (h < 24) return h + ' hr'  + (h > 1 ? 's' : '') + ' ago';
+    var dy = Math.floor(h / 24);
+    return dy + ' day' + (dy > 1 ? 's' : '') + ' ago';
+  }
+
+  /* ── card builder ────────────────────────────────────── */
+  function buildCard(item, idx) {
+    var tc  = THREAT_BADGE[item.threatLevel] || 'badge-ghost';
+    var ti  = THREAT_ICON[item.threatLevel]  || '⚪';
+    var sc  = SOURCE_COLOR[item.source]      || '';
+    var id  = 'nc-' + idx;
+    return [
+      '<div class="card bg-base-100 border border-base-300 shadow-sm',
+      ' hover:shadow-lg hover:-translate-y-0.5 transition-all duration-200 news-card"',
+      ' data-source="'+ esc(item.source) +'" data-level="'+ esc(item.threatLevel) +'">',
+      '<div class="card-body gap-2 p-4">',
+
+        /* source + threat badge */
+        '<div class="flex items-center justify-between gap-2 flex-wrap">',
+          '<span class="text-xs font-semibold '+ sc +' flex items-center gap-1">',
+            '<span class="text-sm">'+ esc(item.sourceIcon) +'</span>',
+            esc(item.source),
+          '</span>',
+          '<span class="badge badge-sm '+ tc +'">'+ ti +' '+ esc(item.threatLevel) +'</span>',
+        '</div>',
+
+        /* title */
+        '<h3 class="font-bold text-sm leading-snug">',
+          '<a href="'+ esc(item.url) +'" target="_blank" rel="noopener"',
+          ' class="hover:text-primary transition-colors">'+ esc(item.title) +'</a>',
+        '</h3>',
+
+        /* timestamp */
+        '<p class="text-xs opacity-40">'+ relTime(item.publishedAt) +'</p>',
+
+        /* short summary (default visible) */
+        '<p class="text-xs opacity-70 leading-relaxed nc-short" id="'+ id +'-s">'+ esc(item.description) +'</p>',
+
+        /* full description (hidden until expanded) */
+        '<p class="text-xs opacity-75 leading-relaxed nc-full hidden" id="'+ id +'-f">'+ esc(item.description) +'</p>',
+
+        /* action row */
+        '<div class="card-actions justify-between items-center mt-1">',
+          '<button class="btn btn-xs btn-ghost nc-rm-btn" data-id="'+ id +'">▶ Read More</button>',
+          '<a href="'+ esc(item.url) +'" target="_blank" rel="noopener"',
+          ' class="btn btn-xs btn-outline">↗ Open</a>',
+        '</div>',
+
+      '</div></div>'
+    ].join('');
+  }
+
+  /* ── filter + render grid ───────────────────────────── */
+  function applyFilters() {
+    var srcEl = document.getElementById('filter-source');
+    var lvlEl = document.getElementById('filter-level');
+    var src = srcEl ? srcEl.value : '';
+    var lvl = lvlEl ? lvlEl.value : '';
+
+    var filtered = allNews.filter(function (n) {
+      return (!src || n.source === src) && (!lvl || n.threatLevel === lvl);
+    });
+
+    var grid = document.getElementById('news-grid');
+    if (!grid) return;
+
+    if (filtered.length === 0) {
+      grid.innerHTML = '<div class="col-span-full text-center py-16 opacity-40 text-sm">No articles match your filters.</div>';
+    } else {
+      grid.innerHTML = filtered.map(buildCard).join('');
+      /* read-more toggles */
+      grid.querySelectorAll('.nc-rm-btn').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+          var id = btn.getAttribute('data-id');
+          var s  = document.getElementById(id + '-s');
+          var f  = document.getElementById(id + '-f');
+          if (!s || !f) return;
+          var open = !f.classList.contains('hidden');
+          if (open) { f.classList.add('hidden');    s.classList.remove('hidden'); btn.textContent = '▶ Read More'; }
+          else      { s.classList.add('hidden');    f.classList.remove('hidden'); btn.textContent = '▼ Read Less'; }
+        });
+      });
+    }
+
+    var cntEl = document.getElementById('news-count');
+    if (cntEl) cntEl.textContent = filtered.length + ' articles';
+  }
+
+  /* ── source stats ────────────────────────────────────── */
+  function renderStats() {
+    var counts = {}, icons = {};
+    allNews.forEach(function (n) {
+      counts[n.source] = (counts[n.source] || 0) + 1;
+      icons[n.source]  = n.sourceIcon;
+    });
+    var el = document.getElementById('source-stats');
+    if (!el) return;
+    el.innerHTML = Object.keys(counts).map(function (src) {
+      var short = src.split(' ').slice(-1)[0];
+      return '<div class="bg-base-100 rounded-lg border border-base-300 p-2 text-center">'
+        + '<div class="text-xl">'+ esc(icons[src]||'📰') +'</div>'
+        + '<div class="text-xs opacity-50 truncate leading-tight">'+ esc(short) +'</div>'
+        + '<div class="font-bold text-sm text-primary">'+ counts[src] +'</div>'
+        + '</div>';
+    }).join('');
+  }
+
+  /* ── localStorage cache (30 min TTL) ────────────────── */
+  function getCached() {
+    try {
+      var ts = localStorage.getItem(CACHE_TS_KEY);
+      var d  = localStorage.getItem(CACHE_KEY);
+      if (ts && d && (Date.now() - parseInt(ts, 10)) < TTL_MS) return JSON.parse(d);
+    } catch(e) {}
+    return null;
+  }
+  function setCache(data) {
+    try {
+      localStorage.setItem(CACHE_KEY, JSON.stringify(data));
+      localStorage.setItem(CACHE_TS_KEY, String(Date.now()));
+    } catch(e) {}
+  }
+  function clearCache() {
+    try { localStorage.removeItem(CACHE_KEY); localStorage.removeItem(CACHE_TS_KEY); } catch(e) {}
+  }
+
+  /* ── UI helpers ──────────────────────────────────────── */
+  function setUpdatedLabel(fromCache) {
+    var el = document.getElementById('news-last-updated');
+    var now = new Date().toLocaleTimeString('en-GB', { hour:'2-digit', minute:'2-digit' });
+    if (el) el.textContent = 'Updated at '+ now + (fromCache ? ' (cached)' : '');
+    var badge = document.getElementById('news-cache-badge');
+    if (badge) badge.classList.toggle('hidden', !fromCache);
+  }
+  function showSkeletons() {
+    var g = document.getElementById('news-grid');
+    if (!g) return;
+    var sk = '';
+    for (var i = 0; i < 6; i++) {
+      sk += '<div class="card bg-base-100 border border-base-300 shadow-sm">'
+          + '<div class="card-body gap-3 p-4">'
+          + '<div class="skeleton h-3 w-1/3 rounded"></div>'
+          + '<div class="skeleton h-5 w-full rounded"></div>'
+          + '<div class="skeleton h-3 w-1/4 rounded"></div>'
+          + '<div class="skeleton h-14 w-full rounded"></div>'
+          + '<div class="flex gap-2 mt-1">'
+          + '<div class="skeleton h-6 w-20 rounded"></div>'
+          + '<div class="skeleton h-6 w-14 rounded"></div>'
+          + '</div></div></div>';
+    }
+    g.innerHTML = sk;
+  }
+
+  /* ── main fetch flow ─────────────────────────────────── */
+  function loadNews(force) {
+    if (!force) {
+      var cached = getCached();
+      if (cached) { allNews = cached; renderStats(); applyFilters(); setUpdatedLabel(true); return; }
+    }
+    showSkeletons();
+    var cntEl = document.getElementById('news-count');
+    if (cntEl) cntEl.textContent = 'Fetching…';
+
+    fetch('/api/news')
+      .then(function(r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
+      .then(function(data) {
+        setCache(data);
+        allNews = data;
+        renderStats();
+        applyFilters();
+        setUpdatedLabel(false);
+      })
+      .catch(function(err) {
+        var g = document.getElementById('news-grid');
+        if (g) g.innerHTML = '<div class="col-span-full"><div role="alert" class="alert alert-error alert-soft">'
+          + '⚠️ Failed to load news: '+ esc(String(err))
+          + '. <button onclick="window.__newsHubRefresh()" class="btn btn-xs btn-error ml-2">Retry</button>'
+          + '</div></div>';
+        var cntEl2 = document.getElementById('news-count');
+        if (cntEl2) cntEl2.textContent = 'Error';
+      });
+  }
+
+  /* ── public refresh ──────────────────────────────────── */
+  window.__newsHubRefresh = function () { clearCache(); loadNews(true); };
+
+  /* ── bind controls ───────────────────────────────────── */
+  function bindControls() {
+    var rb  = document.getElementById('news-refresh-btn');
+    var sf  = document.getElementById('filter-source');
+    var lf  = document.getElementById('filter-level');
+    if (rb) rb.addEventListener('click', function() { clearCache(); loadNews(true); });
+    if (sf) sf.addEventListener('change', applyFilters);
+    if (lf) lf.addEventListener('change', applyFilters);
+  }
+
+  /* ── boot (full load + htmx partial nav) ────────────── */
+  function init() { bindControls(); loadNews(false); }
+
+  if (document.readyState === 'loading') { document.addEventListener('DOMContentLoaded', init); }
+  else { init(); }
+  /* htmx re-executes inline scripts on swap, so init() runs again on re-navigation */
 })();
-            ` }} />
-          </div>
-        </div>
-
-        {/* QUICK ACTION PANEL */}
-        <div class="card bg-base-100 shadow-md border border-base-300">
-          <div class="card-body">
-            <h2 class="card-title text-lg mb-4">Quick Actions</h2>
-            <div class="space-y-2">
-              {[
-                { icon: '🔍', label: 'Port Scan', color: 'error' },
-                { icon: '🛡️', label: 'Vulnerability Scan', color: 'warning' },
-                { icon: '📊', label: 'Whois Lookup', color: 'info' },
-                { icon: '🧹', label: 'Full Audit', color: 'success' }
-              ].map((action) => (
-                <button key={action.label} class={`btn btn-${action.color} btn-outline btn-block justify-start`}>
-                  <span class="text-lg">{action.icon}</span>
-                  {action.label}
-                </button>
-              ))}
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* VULNERABILITY & SECURITY STATUS */}
-      <div class="grid gap-6 grid-cols-1 lg:grid-cols-2 mb-6">
-        {/* VULNERABILITY PYRAMID */}
-        <div class="card bg-base-100 shadow-md border border-base-300">
-          <div class="card-body">
-            <h2 class="card-title mb-4">Vulnerability Overview</h2>
-            <div class="space-y-3">
-              {[
-                { level: 'Critical', count: 8, color: 'error', width: 'w-full' },
-                { level: 'High', count: 24, color: 'warning', width: 'w-5/6' },
-                { level: 'Medium', count: 10, color: 'info', width: 'w-4/6' },
-                { level: 'Low', count: 5, color: 'success', width: 'w-3/6' }
-              ].map((vuln) => (
-                <div key={vuln.level} class="space-y-1">
-                  <div class="flex justify-between items-center">
-                    <span class="font-semibold text-sm">{vuln.level}</span>
-                    <span class={`badge badge-${vuln.color}`}>{vuln.count} issues</span>
-                  </div>
-                  <progress class={`progress progress-${vuln.color} w-full`} value={vuln.count * 12.5} max="100"></progress>
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
-
-        {/* SECURITY SYSTEMS STATUS */}
-        <div class="card bg-base-100 shadow-md border border-base-300">
-          <div class="card-body">
-            <h2 class="card-title mb-4">Security Systems</h2>
-            <div class="space-y-2">
-              {[
-                { name: 'Firewall', status: 'Protected', color: 'success', uptime: '100%' },
-                { name: 'IDS/IPS', status: 'Active', color: 'success', uptime: '99.9%' },
-                { name: 'WAF', status: 'Updating', color: 'warning', uptime: '98.5%' },
-                { name: 'SSL/TLS', status: 'Secure', color: 'success', uptime: '100%' }
-              ].map((sys) => (
-                <div key={sys.name} class="flex items-center justify-between p-3 bg-base-200/50 rounded-lg hover:bg-base-200 transition-colors">
-                  <div class="flex items-center gap-3">
-                    <span class={`status status-md status-${sys.color}`}></span>
-                    <div>
-                      <p class="font-semibold text-sm">{sys.name}</p>
-                      <p class="text-xs opacity-60">Uptime: {sys.uptime}</p>
-                    </div>
-                  </div>
-                  <span class={`badge badge-${sys.color} badge-sm`}>{sys.status}</span>
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* THREAT INTELLIGENCE TABLE */}
-      <div class="card bg-base-100 shadow-md border border-base-300">
-        <div class="card-body">
-          <div class="flex justify-between items-center mb-4">
-            <div>
-              <h2 class="card-title">Recent Threats</h2>
-              <p class="text-sm opacity-60">Live threat intelligence feed</p>
-            </div>
-            <button class="btn btn-sm btn-outline">🔄 Refresh</button>
-          </div>
-          
-          <div class="overflow-x-auto">
-            <table class="table table-zebra w-full table-sm">
-              <thead class="bg-base-200">
-                <tr>
-                  <th class="font-bold">Threat ID</th>
-                  <th class="font-bold">Source IP</th>
-                  <th class="font-bold">Type</th>
-                  <th class="font-bold">Severity</th>
-                  <th class="font-bold">Status</th>
-                  <th class="font-bold">Action</th>
-                </tr>
-              </thead>
-              <tbody>
-                {[
-                  { id: '#THR-2401', source: '192.168.1.105', type: 'Malware', severity: 'Critical', status: 'Quarantined', icon: '🔒' },
-                  { id: '#THR-2402', source: '10.0.0.42', type: 'Phishing', severity: 'High', status: 'Blocked', icon: '🚫' },
-                  { id: '#THR-2403', source: '172.16.0.8', type: 'DDoS', severity: 'Critical', status: 'Mitigating', icon: '⚔️' },
-                  { id: '#THR-2404', source: '203.0.113.45', type: 'Reconnaissance', severity: 'Medium', status: 'Monitored', icon: '👁️' },
-                  { id: '#THR-2405', source: '198.51.100.12', type: 'Exploit', severity: 'High', status: 'Patched', icon: '✓' },
-                ].map((threat) => (
-                  <tr key={threat.id} class="hover:bg-base-200 transition-colors">
-                    <td>
-                      <span class="font-mono font-bold text-primary">{threat.id}</span>
-                    </td>
-                    <td>
-                      <code class="bg-base-200 px-2 py-1 rounded text-xs">{threat.source}</code>
-                    </td>
-                    <td>
-                      <span class="font-semibold">{threat.type}</span>
-                    </td>
-                    <td>
-                      <span class={`badge badge-${threat.severity === 'Critical' ? 'error' : threat.severity === 'High' ? 'warning' : 'info'}`}>
-                        {threat.severity}
-                      </span>
-                    </td>
-                    <td>
-                      <span class="flex items-center gap-1">
-                        <span>{threat.icon}</span>
-                        <span class="text-sm">{threat.status}</span>
-                      </span>
-                    </td>
-                    <td>
-                      <button class="btn btn-ghost btn-xs hover:btn-primary">Details →</button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-
-          <div class="divider my-2"></div>
-          <div class="flex justify-between items-center">
-            <span class="text-sm opacity-70">Showing 5 of 847 threats</span>
-            <div class="join">
-              <button class="join-item btn btn-xs btn-outline">«</button>
-              <button class="join-item btn btn-xs btn-active">1</button>
-              <button class="join-item btn btn-xs btn-outline">2</button>
-              <button class="join-item btn btn-xs btn-outline">3</button>
-              <button class="join-item btn btn-xs btn-outline">»</button>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* INTEL FEEDS & DOMAINS */}
-      <div class="grid gap-6 grid-cols-1 lg:grid-cols-2">
-        {/* ACTIVE FEEDS */}
-        <div class="card bg-base-100 shadow-md border border-base-300">
-          <div class="card-body">
-            <h2 class="card-title mb-4">Active Intelligence Feeds</h2>
-            <div class="space-y-3">
-              {[
-                { feed: 'MISP Feed', status: 'Active', time: '2 mins ago', updates: 142 },
-                { feed: 'URLhaus', status: 'Active', time: '5 mins ago', updates: 87 },
-                { feed: 'Abuse.ch', status: 'Active', time: '8 mins ago', updates: 23 },
-                { feed: 'Custom Feed', status: 'Active', time: '1 hour ago', updates: 5 }
-              ].map((feed) => (
-                <div key={feed.feed} class="flex items-center justify-between p-3 bg-base-200/30 rounded-lg hover:bg-base-200 transition-colors group cursor-pointer">
-                  <div class="flex items-center gap-3">
-                    <span class="status status-md status-success"></span>
-                    <div>
-                      <p class="font-semibold text-sm">{feed.feed}</p>
-                      <p class="text-xs opacity-60">Last update: {feed.time}</p>
-                    </div>
-                  </div>
-                  <span class="badge badge-success badge-sm group-hover:badge-lg transition-all">{feed.updates}</span>
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
-
-        {/* MONITORED DOMAINS */}
-        <div class="card bg-base-100 shadow-md border border-base-300">
-          <div class="card-body">
-            <h2 class="card-title mb-4">Monitored Malicious Domains</h2>
-            <div class="space-y-3">
-              {[
-                { domain: 'malicious-site.ru', risk: 'High', lastSeen: '1 min ago', badge: 'warning' },
-                { domain: 'phishing-portal.net', risk: 'Critical', lastSeen: '5 mins ago', badge: 'error' },
-                { domain: 'c2-server.xyz', risk: 'Critical', lastSeen: '12 mins ago', badge: 'error' },
-                { domain: 'suspicious-domain.com', risk: 'Medium', lastSeen: '1 hour ago', badge: 'info' }
-              ].map((item) => (
-                <div key={item.domain} class="flex items-center justify-between p-3 bg-base-200/30 rounded-lg hover:bg-base-200 transition-colors group cursor-pointer">
-                  <div class="flex items-center gap-3 flex-1 min-w-0">
-                    <span class={`badge badge-${item.badge} badge-lg`}>▼</span>
-                    <div class="flex-1 min-w-0">
-                      <p class="font-mono text-sm truncate">{item.domain}</p>
-                      <p class="text-xs opacity-60">Seen: {item.lastSeen}</p>
-                    </div>
-                  </div>
-                  <span class={`badge badge-${item.badge} badge-outline badge-sm whitespace-nowrap ml-2`}>{item.risk}</span>
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
-      </div>
-
-    </div>
+      ` }} />
+    </div>,
   )
 })
-import intelligenceRoutes from './routes/intelligence'
 
-// Mount intelligence routes
+// ── Preserve original dashboard as mock ──────────────────────────────────────
+app.route('/dashboard-mock', dashboardMock)
+
+// ── Intelligence tools ────────────────────────────────────────────────────────
 app.route('/intelligence', intelligenceRoutes)
 
 export default app
