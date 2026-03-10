@@ -1,5 +1,6 @@
 import { Hono } from 'hono'
 import { lookupIP } from '../lib/whois'
+import { logCheckEvents } from '../lib/checklog'
 
 const whois = new Hono<{ Bindings: { IPINFO_API_KEY?: string } }>()
 
@@ -41,16 +42,54 @@ whois.post('/api/lookup', async (c) => {
   const ok  = results.filter((r) => r.ok)
   const bad = results.filter((r) => !r.ok)
 
+  // Log each lookup result
+  const _username = (c as any).get?.('username') as string ?? 'unknown'
+  void logCheckEvents('whois', 'whois', 'ipinfo.io', [
+    ...ok.map((r) => ({
+      indicator: r.data!.ip || r.ip,
+      result: 'success' as const,
+      summary: JSON.stringify({ org: r.data!.org || null, city: r.data!.city || null, region: r.data!.region || null, country: r.data!.country || null, hostname: r.data!.hostname || null }),
+    })),
+    ...bad.map((r) => ({
+      indicator: r.ip,
+      result: 'error' as const,
+      detail: r.error,
+    })),
+  ], c.req.raw, { username: _username })
+
+  // Build JSON payload for client-side button actions
+  const payload = ok.map((r) => ({
+    ip:       r.data!.ip       || r.ip,
+    hostname: r.data!.hostname || '',
+    org:      r.data!.org      || '',
+    city:     r.data!.city     || '',
+    region:   r.data!.region   || '',
+    country:  r.data!.country  || '',
+    timezone: r.data!.timezone || '',
+  }))
+
   return c.html(
-    <div class="space-y-4">
-      {/* Summary bar */}
-      <div class="flex items-center gap-3 flex-wrap">
-        <span class="badge badge-success badge-lg">{ok.length} resolved</span>
-        {bad.length > 0 && (
-          <span class="badge badge-error badge-lg">{bad.length} failed</span>
-        )}
-        <span class="text-xs opacity-50">via ipinfo.io Lite API</span>
+    <div class="space-y-4" id="whois-results-block">
+      {/* Summary + action buttons */}
+      <div class="flex items-center justify-between gap-2 flex-wrap">
+        <div class="flex items-center gap-2 flex-wrap">
+          <span class="badge badge-success badge-lg">{ok.length} resolved</span>
+          {bad.length > 0 && (
+            <span class="badge badge-error badge-lg">{bad.length} failed</span>
+          )}
+          <span class="text-xs opacity-50">via ipinfo.io Lite API</span>
+        </div>
+        <div class="flex gap-1 flex-wrap" id="whois-action-btns">
+          <button class="btn btn-xs btn-ghost" id="wh-new-check">🔄 New Check</button>
+          <button class="btn btn-xs btn-outline" id="wh-copy-clip">📋 Copy to Clipboard</button>
+          <button class="btn btn-xs btn-outline" id="wh-export-csv">📥 Export CSV</button>
+          <button class="btn btn-xs btn-primary btn-outline" id="wh-copy-fmt">⊕ Copy Formatted IP</button>
+        </div>
       </div>
+      {/* Hidden data payload for JS */}
+      <script id="whois-payload" type="application/json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(payload) }}
+      />
 
       {/* Results table */}
       {ok.length > 0 && (
@@ -184,13 +223,108 @@ whois.get('/', (c) => {
         dangerouslySetInnerHTML={{
           __html: `
 (function () {
+  function resetResults() {
+    var r = document.getElementById('whoisResults');
+    if (r) r.innerHTML = '<div class="alert alert-info alert-soft"><span>Enter IP addresses above and click Lookup All</span></div>';
+  }
+
+  function getPayload() {
+    var el = document.getElementById('whois-payload');
+    if (!el) return [];
+    try { return JSON.parse(el.textContent || '[]'); } catch { return []; }
+  }
+
+  function getTableRows() {
+    var tbl = document.querySelector('#whoisResults table');
+    if (!tbl) return { headers: [], rows: [] };
+    var headers = Array.from(tbl.querySelectorAll('thead th')).map(function(th) { return th.textContent.trim(); });
+    var rows = Array.from(tbl.querySelectorAll('tbody tr')).map(function(tr) {
+      return Array.from(tr.querySelectorAll('td')).map(function(td) { return td.textContent.trim(); });
+    });
+    return { headers: headers, rows: rows };
+  }
+
+  function copyText(text) {
+    navigator.clipboard.writeText(text).then(function() {
+      showToast('Copied to clipboard!');
+    }).catch(function() {
+      var ta = document.createElement('textarea');
+      ta.value = text; document.body.appendChild(ta); ta.select();
+      document.execCommand('copy'); document.body.removeChild(ta);
+      showToast('Copied!');
+    });
+  }
+
+  function showToast(msg) {
+    var t = document.createElement('div');
+    t.className = 'toast toast-top toast-end z-50';
+    t.innerHTML = '<div class="alert alert-success text-xs py-2">' + msg + '</div>';
+    document.body.appendChild(t);
+    setTimeout(function() { t.remove(); }, 2500);
+  }
+
+  function bindActionBtns() {
+    var newChk = document.getElementById('wh-new-check');
+    if (newChk && !newChk._bound) {
+      newChk._bound = true;
+      newChk.addEventListener('click', function() {
+        resetResults();
+        var inp = document.getElementById('whoisInput');
+        if (inp) { inp.value = ''; inp.focus(); }
+      });
+    }
+
+    var copyClip = document.getElementById('wh-copy-clip');
+    if (copyClip && !copyClip._bound) {
+      copyClip._bound = true;
+      copyClip.addEventListener('click', function() {
+        var d = getTableRows();
+        if (!d.rows.length) return;
+        var lines = [d.headers.join('\\t')].concat(d.rows.map(function(r) { return r.join('\\t'); }));
+        copyText(lines.join('\\n'));
+      });
+    }
+
+    var expCsv = document.getElementById('wh-export-csv');
+    if (expCsv && !expCsv._bound) {
+      expCsv._bound = true;
+      expCsv.addEventListener('click', function() {
+        var d = getTableRows();
+        if (!d.rows.length) return;
+        function q(v) { return '"' + String(v).replace(/"/g, '""') + '"'; }
+        var csv = [d.headers.map(q).join(',')].concat(d.rows.map(function(r) { return r.map(q).join(','); })).join('\\n');
+        var blob = new Blob([csv], { type: 'text/csv' });
+        var a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download = 'whois-' + new Date().toISOString().slice(0,10) + '.csv';
+        a.click();
+        showToast('CSV downloaded');
+      });
+    }
+
+    var copyFmt = document.getElementById('wh-copy-fmt');
+    if (copyFmt && !copyFmt._bound) {
+      copyFmt._bound = true;
+      copyFmt.addEventListener('click', function() {
+        var data = getPayload();
+        if (!data.length) return;
+        var entries = data.map(function(r) {
+          var hostname = r.hostname || '-';
+          var cc = r.country || '-';
+          return r.ip + ' (' + hostname + ',' + cc + ')';
+        });
+        copyText(entries.join(', '));
+      });
+    }
+  }
+
   function handleSubmit(e) {
     e.preventDefault();
     var results = document.getElementById('whoisResults');
     results.innerHTML = '<div class="flex justify-center py-6"><span class="loading loading-spinner loading-lg"></span></div>';
     fetch('/whois/api/lookup', { method: 'POST', body: new FormData(e.target) })
       .then(function (r) { return r.text(); })
-      .then(function (html) { results.innerHTML = html; })
+      .then(function (html) { results.innerHTML = html; bindActionBtns(); })
       .catch(function (err) {
         results.innerHTML = '<div class="alert alert-error alert-soft"><span>Error: ' + err.message + '</span></div>';
       });
@@ -208,10 +342,10 @@ whois.get('/', (c) => {
       clearBtn.addEventListener('click', function () {
         var inp = document.getElementById('whoisInput');
         if (inp) inp.value = '';
-        var results = document.getElementById('whoisResults');
-        if (results) results.innerHTML = '<div class="alert alert-info alert-soft"><span>Enter IP addresses above and click Lookup All</span></div>';
+        resetResults();
       });
     }
+    bindActionBtns();
   }
 
   bind();

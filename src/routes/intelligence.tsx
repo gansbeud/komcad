@@ -2,6 +2,7 @@ import { Hono } from 'hono'
 import { checkAbuseIPDB, formatAbuseIPDBResult } from '../lib/abuseipdb'
 import { checkVirusTotal, formatVirusTotalResult } from '../lib/virustotal'
 import { checkOTX, formatOTXResult } from '../lib/otx'
+import { logCheckEvents } from '../lib/checklog'
 
 const intelligence = new Hono()
 
@@ -89,6 +90,12 @@ intelligence.post('/api/check', async (c) => {
     // Null-safe cell helpers
     const v = (val: any) => (val !== null && val !== undefined ? String(val) : '-')
     const bv = (val: any) => (val === null || val === undefined ? '-' : val ? 'Yes' : 'No')
+    // Badge variant for whitelist: Yes → green badge, No → plain text
+    const bvWL = (val: any) => val === null || val === undefined
+      ? <span class="text-xs opacity-50">—</span>
+      : val
+        ? <span class="badge badge-success badge-sm font-bold">Yes ✓</span>
+        : <span class="text-xs">No</span>
     const toJakartaTime = (dateStr: string | null | undefined): string => {
       if (!dateStr) return '-'
       try {
@@ -150,6 +157,27 @@ intelligence.post('/api/check', async (c) => {
         const otxMal = r.otx && r.otx.status === 'malicious'
         return abdbMal || vtMal || otxMal
       }).length
+
+      // Log each indicator result
+      const _username = (c as any).get?.('username') as string ?? 'unknown'
+      void logCheckEvents('intelligence', mode, source,
+        combinedResults.map((r) => {
+          const hasError = Object.keys(r.errors).length > 0 && !r.abdb && !r.vt && !r.otx
+          const summaryObj: Record<string, any> = {}
+          if (r.abdb) summaryObj.abdb = { status: r.abdb.status, score: r.abdb.abuseConfidenceScore, reports: r.abdb.totalReports, whitelisted: r.abdb.isWhitelisted }
+          if (r.vt)   summaryObj.vt   = { status: r.vt.status, malicious: r.vt.last_analysis_stats?.malicious, suspicious: r.vt.last_analysis_stats?.suspicious }
+          if (r.otx)  summaryObj.otx  = { status: r.otx.status, pulses: r.otx.pulse_count, whitelisted: r.otx.whitelisted }
+          if (Object.keys(r.errors).length > 0) summaryObj.errors = r.errors
+          return {
+            indicator: r.indicator,
+            result: hasError ? 'error' as const : 'success' as const,
+            detail: hasError ? JSON.stringify(r.errors) : undefined,
+            summary: hasError ? null : JSON.stringify(summaryObj),
+          }
+        }),
+        c.req.raw,
+        { username: _username }
+      )
 
       const renderCombinedCorrelation = () => {
         const valid = combinedResults.filter((r) => r.abdb || r.vt || r.otx)
@@ -259,7 +287,7 @@ intelligence.post('/api/check', async (c) => {
                       <><td colSpan={4} class="text-error text-xs border-l border-base-300">{r.errors['AbuseIPDB']}</td></>
                     ) : r.abdb ? (
                       <>
-                        <td class="text-xs border-l border-base-300">{bv(r.abdb.isWhitelisted)}</td>
+                        <td class="text-xs border-l border-base-300">{bvWL(r.abdb.isWhitelisted)}</td>
                         <td class="text-xs">{bv(r.abdb.isTor)}</td>
                         <td><span class={`badge badge-sm font-bold ${abdbBadge}`}>{abdbScore}%</span></td>
                         <td class="text-xs">{v(r.abdb.totalReports)}</td>
@@ -287,7 +315,7 @@ intelligence.post('/api/check', async (c) => {
                     ) : r.otx ? (
                       <>
                         <td class="border-l border-base-300"><span class={`badge badge-sm font-bold ${otxStatusColor}`}>{otxStatus}</span></td>
-                        <td class="text-xs">{bv(r.otx.whitelisted)}</td>
+                        <td class="text-xs">{bvWL(r.otx.whitelisted)}</td>
                         <td class={`text-xs font-semibold ${otxRepColor}`}>{v(r.otx.reputation)}</td>
                         <td class="text-xs">{v(r.otx.pulse_count)}</td>
                       </>
@@ -413,7 +441,7 @@ intelligence.post('/api/check', async (c) => {
             return (
               <tr key={idx} class="hover:bg-base-200/50">
                 <td class="font-mono text-xs">{v(d.ipAddress)}</td>
-                <td class="text-xs">{bv(d.isWhitelisted)}</td>
+                <td class="text-xs">{bvWL(d.isWhitelisted)}</td>
                 <td class="text-xs">{bv(d.isTor)}</td>
                 <td><span class={`badge badge-sm font-bold ${abuseBadge}`}>{abuseScore}%</span></td>
                 <td class="text-xs">{v(d.totalReports)}</td>
@@ -542,7 +570,7 @@ intelligence.post('/api/check', async (c) => {
               <tr key={idx} class="hover:bg-base-200/50">
                 <td class="font-mono text-xs">{v(d.indicator)}</td>
                 <td><span class={`badge badge-sm font-bold ${statusColor}`}>{v(d.status)}</span></td>
-                <td class="text-xs">{bv(d.whitelisted)}</td>
+                <td class="text-xs">{bvWL(d.whitelisted)}</td>
                 <td class={`text-xs font-semibold ${repColor}`}>{v(d.reputation)}</td>
                 <td class="text-xs">{v(d.pulse_count)}</td>
                 <td class="text-xs max-w-72 truncate" title={pulseNamesList}>{pulseNamesList}</td>
@@ -555,6 +583,24 @@ intelligence.post('/api/check', async (c) => {
 
     // Compute malicious count for session stats
     const maliciousCount = results.filter(r => r.result?.status === 'malicious').length
+
+    // Log each indicator result
+    const _username = (c as any).get?.('username') as string ?? 'unknown'
+    void logCheckEvents('intelligence', mode, source,
+      results.map((r) => {
+        if (r.error) return { indicator: r.indicator, result: 'error' as const, detail: r.error, summary: null }
+        const s = r.result
+        let summaryObj: Record<string, any> | null = null
+        if (s) {
+          if (source === 'AbuseIPDB') summaryObj = { status: s.status, score: s.abuseConfidenceScore, reports: s.totalReports, whitelisted: s.isWhitelisted }
+          else if (source === 'VirusTotal') summaryObj = { status: s.status, malicious: s.last_analysis_stats?.malicious, suspicious: s.last_analysis_stats?.suspicious }
+          else if (source === 'OTX Alienvault') summaryObj = { status: s.status, pulses: s.pulse_count, whitelisted: s.whitelisted }
+        }
+        return { indicator: r.indicator, result: 'success' as const, summary: summaryObj ? JSON.stringify(summaryObj) : null }
+      }),
+      c.req.raw,
+      { username: _username }
+    )
 
     // Combined Analysis: cross-indicator correlation helpers
     const renderCorrelation = () => {

@@ -4,9 +4,32 @@ import { fetchAllNews } from './lib/rss'
 import intelligenceRoutes from './routes/intelligence'
 import dashboardMock from './routes/dashboard-mock'
 import whoisRoutes from './routes/whois'
+import authRoutes from './routes/auth'
+import auditlogRoutes from './routes/auditlog'
 import { sendReportEmail } from './lib/mailer'
+import { verify } from 'hono/jwt'
+import { getCookie, deleteCookie } from 'hono/cookie'
 
 const app = new Hono()
+
+// ── AUTH — login/logout public routes (no JWT guard) ────────────────────────
+app.route('/', authRoutes)
+
+// ── JWT guard — protects every path except /login ───────────────────────
+app.use('*', async (c, next) => {
+  const path = c.req.path
+  if (path === '/login' || path.startsWith('/login/') || path === '/logout') return next()
+  const token = getCookie(c, 'komcad_token')
+  if (!token) return c.redirect('/login')
+  try {
+    const payload = await verify(token, (c.env as any)?.JWT_SECRET ?? process.env.JWT_SECRET ?? 'komcad-dev-secret', 'HS256')
+    c.set('username', payload.sub as string)
+  } catch {
+    deleteCookie(c, 'komcad_token', { path: '/' })
+    return c.redirect('/login')
+  }
+  return next()
+})
 
 app.use('*', renderer)
 
@@ -320,6 +343,25 @@ app.route('/dashboard-mock', dashboardMock)
 // ── Intelligence tools ────────────────────────────────────────────────────────
 app.route('/intelligence', intelligenceRoutes)
 app.route('/whois', whoisRoutes)
+
+// ── Admin — audit log, accessible only by ADMIN_USER ────────────────────────
+app.use('/admin/*', async (c, next) => {
+  const username = (c as any).get?.('username') as string
+  const adminUser = (c.env as any)?.ADMIN_USER ?? process.env.ADMIN_USER ?? 'administrator'
+  if (!username || username !== adminUser) {
+    return c.html(
+      <div class="flex flex-col items-center justify-center min-h-screen gap-4">
+        <div class="text-6xl">🚫</div>
+        <h1 class="text-2xl font-bold">Access Denied</h1>
+        <p class="text-base-content/60">This page is restricted to administrators.</p>
+        <a href="/" class="btn btn-primary btn-sm">Go Home</a>
+      </div>,
+      403
+    )
+  }
+  return next()
+})
+app.route('/admin', auditlogRoutes)
 
 // ── Report / Contact form submission ─────────────────────────────────────────
 app.post('/api/report', async (c) => {

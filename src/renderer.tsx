@@ -1,6 +1,10 @@
 import { jsxRenderer } from 'hono/jsx-renderer'
 
 export const renderer = jsxRenderer(({ children, title }: any, c: any) => {
+  // Extract authenticated username (set by JWT middleware)
+  const username: string = ((c as any).get?.('username') as string) || 'User'
+  const initials = username.slice(0, 2).toUpperCase()
+  const isAdmin = username !== 'User' && username === (process.env.ADMIN_USER ?? 'administrator')
   // HTMX partial navigation: return only content + OOB breadcrumb swap
   if (c.req.header('HX-Request')) {
     c.header('HX-Title', title ?? 'News Hub')
@@ -106,16 +110,28 @@ export const renderer = jsxRenderer(({ children, title }: any, c: any) => {
                   </ul>
                 </div>
 
-                {/* Profile — non-interactive (not configured) */}
-                <div
-                  class="btn btn-ghost btn-circle btn-sm avatar cursor-not-allowed opacity-60 tooltip tooltip-left"
-                  data-tip="Profile"
-                  tabindex={-1}
-                  aria-disabled="true"
-                >
-                  <div class="w-8 rounded-full bg-gradient-to-br from-primary to-secondary text-primary-content flex items-center justify-center font-bold text-sm">
-                    AK
-                  </div>
+                {/* User menu */}
+                <div class="dropdown dropdown-end">
+                  <button
+                    class="btn btn-ghost btn-circle btn-sm avatar tooltip tooltip-left"
+                    data-tip={username}
+                    tabindex={0}
+                  >
+                    <div class="w-8 rounded-full bg-gradient-to-br from-primary to-secondary text-primary-content flex items-center justify-center font-bold text-sm">
+                      {initials}
+                    </div>
+                  </button>
+                  <ul tabindex={0} class="dropdown-content menu shadow-lg bg-base-100 border border-base-300 rounded-box w-44 p-2 gap-0.5 z-50">
+                    <li class="px-3 py-1.5">
+                      <span class="text-xs font-bold opacity-70 select-none">{username}</span>
+                    </li>
+                    <div class="divider my-0.5"></div>
+                    <li>
+                      <a href="/logout" class="text-error hover:bg-error/10 text-sm">
+                        🚪 Logout
+                      </a>
+                    </li>
+                  </ul>
                 </div>
 
               </div>
@@ -200,7 +216,6 @@ export const renderer = jsxRenderer(({ children, title }: any, c: any) => {
                     { icon: '📡', label: 'HTTP Proxy' },
                     { icon: '🧩', label: 'MISP' },
                     { icon: '📋', label: 'Report Utility' },
-                    { icon: '📜', label: 'Audit Log' },
                     { icon: '⚕️', label: 'Health' },
                     { icon: '⚙️', label: 'Configuration' },
                   ].map((item) => (
@@ -211,6 +226,23 @@ export const renderer = jsxRenderer(({ children, title }: any, c: any) => {
                       </span>
                     </li>
                   ))}
+
+                  {/* Admin section — visible only to admin user */}
+                  {isAdmin && (
+                    <>
+                      <div class="divider my-1 text-xs opacity-40">Admin</div>
+                      <li>
+                        <a
+                          {...{ 'hx-get': '/admin/auditlog', 'hx-target': '#page-content', 'hx-push-url': 'true', 'hx-swap': 'innerHTML' }}
+                          class="py-1.5 hover:bg-primary/20 nav-link gap-2"
+                          data-path="/admin/auditlog"
+                        >
+                          <span>📋</span>
+                          <span>Audit Log</span>
+                        </a>
+                      </li>
+                    </>
+                  )}
 
                 </ul>
               </div>
