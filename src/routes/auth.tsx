@@ -77,7 +77,7 @@ auth.post('/login', async (c) => {
 
   await logAuthEvent('login_success', username, c.req.raw, { sessionExpiresAt })
   loginAttempts.delete(clientIp)
-  return c.redirect('/')
+  return c.redirect('/app/')
 })
 
 // ── GET /logout ────────────────────────────────────────────────────────────

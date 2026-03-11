@@ -2,6 +2,7 @@ import { Hono } from 'hono'
 import { getCookie } from 'hono/cookie'
 import { verify } from 'hono/jwt'
 import { renderer } from './renderer'
+import landingRoutes from './routes/landing'
 import authRoutes from './routes/auth'
 import intelligenceRoutes from './routes/intelligence'
 import whoisRoutes from './routes/whois'
@@ -12,13 +13,13 @@ import newsRoutes from './routes/news'
 
 const app = new Hono()
 
-// ── Public auth routes (no JWT guard) — must be registered first ────────────
-app.route('/', authRoutes)
+// ── Public routes — no auth required ────────────────────────────────────────
+app.route('/', landingRoutes)          // landing page
+app.route('/', authRoutes)             // /login, /logout
+app.route('/api', apiRoutes)           // /api/contact (public) + legacy /api/report
 
-// ── JWT auth guard for all other routes ─────────────────────────────────────
-app.use('*', async (c, next) => {
-  const path = c.req.path
-  if (path === '/login' || path.startsWith('/login/') || path === '/logout') return next()
+// ── JWT auth guard ────────────────────────────────────────────────────────────
+async function jwtGuard(c: any, next: any) {
   const token = getCookie(c, 'komcad_token')
   if (!token) return c.redirect('/login')
   try {
@@ -30,18 +31,20 @@ app.use('*', async (c, next) => {
     return c.redirect('/login')
   }
   return next()
-})
+}
+
+app.use('/app', jwtGuard)
+app.use('/app/*', jwtGuard)
 
 // ── App layout middleware (authenticated routes only) ────────────────────────
-app.use('*', renderer)
+app.use('/app', renderer)
+app.use('/app/*', renderer)
 
-// ── Protected routes ─────────────────────────────────────────────────────────
-app.route('/', dashboardMockRoutes)
-
-app.route('/news', newsRoutes)
-app.route('/intelligence', intelligenceRoutes)
-app.route('/whois', whoisRoutes)
-app.route('/admin', auditlogRoutes)
-app.route('/api', apiRoutes)
+// ── Protected app routes ────────────────────────────────────────────────────
+app.route('/app', dashboardMockRoutes)
+app.route('/app/news', newsRoutes)
+app.route('/app/intelligence', intelligenceRoutes)
+app.route('/app/whois', whoisRoutes)
+app.route('/app/admin', auditlogRoutes)
 
 export default app

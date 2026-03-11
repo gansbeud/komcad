@@ -259,7 +259,7 @@ news.get('/', (c) => {
     var cntEl = document.getElementById('news-count');
     if (cntEl) cntEl.textContent = 'Fetching…';
 
-    fetch('/news/api')
+    fetch('/app/news/api')
       .then(function(r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
       .then(function(data) {
         setCache(data);

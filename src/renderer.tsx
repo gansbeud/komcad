@@ -54,7 +54,7 @@ export const renderer = jsxRenderer(({ children, title }: any, c: any) => {
                     </li>
                     <li>
                       <a
-                        {...{ 'hx-get': '/', 'hx-target': '#page-content', 'hx-push-url': 'true', 'hx-swap': 'innerHTML' }}
+                        {...{ 'hx-get': '/app/', 'hx-target': '#page-content', 'hx-push-url': 'true', 'hx-swap': 'innerHTML' }}
                         class="link link-hover"
                       >
                         Home
@@ -117,7 +117,7 @@ export const renderer = jsxRenderer(({ children, title }: any, c: any) => {
                     data-tip={username}
                     tabindex={0}
                   >
-                    <div class="w-8 rounded-full bg-gradient-to-br from-primary to-secondary text-primary-content flex items-center justify-center font-bold text-sm">
+                    <div class="w-8 rounded-full bg-linear-to-br from-primary to-secondary text-primary-content flex items-center justify-center font-bold text-sm">
                       {initials}
                     </div>
                   </button>
@@ -130,6 +130,11 @@ export const renderer = jsxRenderer(({ children, title }: any, c: any) => {
                       <a href="/logout" class="text-error hover:bg-error/10 text-sm">
                         🚪 Logout
                       </a>
+                      <li>
+                        <a href="/" class="text-base-content/60 hover:bg-base-200 text-sm">
+                          🏠 Landing Page
+                        </a>
+                      </li>
                     </li>
                   </ul>
                 </div>
@@ -175,9 +180,9 @@ export const renderer = jsxRenderer(({ children, title }: any, c: any) => {
                   {/* Dashboard — main page */}
                   <li>
                     <a
-                      {...{ 'hx-get': '/', 'hx-target': '#page-content', 'hx-push-url': 'true', 'hx-swap': 'innerHTML' }}
+                      {...{ 'hx-get': '/app/', 'hx-target': '#page-content', 'hx-push-url': 'true', 'hx-swap': 'innerHTML' }}
                       class="py-1.5 hover:bg-primary/20 nav-link gap-2"
-                      data-path="/"
+                      data-path="/app/"
                     >
                       <span>📊</span>
                       <span>Dashboard</span>
@@ -187,9 +192,9 @@ export const renderer = jsxRenderer(({ children, title }: any, c: any) => {
                   {/* News Hub */}
                   <li>
                     <a
-                      {...{ 'hx-get': '/news', 'hx-target': '#page-content', 'hx-push-url': 'true', 'hx-swap': 'innerHTML' }}
+                      {...{ 'hx-get': '/app/news', 'hx-target': '#page-content', 'hx-push-url': 'true', 'hx-swap': 'innerHTML' }}
                       class="py-1.5 hover:bg-primary/20 nav-link gap-2"
-                      data-path="/news"
+                      data-path="/app/news"
                     >
                       <span>📰</span>
                       <span>News Hub</span>
@@ -199,9 +204,9 @@ export const renderer = jsxRenderer(({ children, title }: any, c: any) => {
                   {/* Intelligence */}
                   <li>
                     <a
-                      {...{ 'hx-get': '/intelligence', 'hx-target': '#page-content', 'hx-push-url': 'true', 'hx-swap': 'innerHTML' }}
+                      {...{ 'hx-get': '/app/intelligence', 'hx-target': '#page-content', 'hx-push-url': 'true', 'hx-swap': 'innerHTML' }}
                       class="py-1.5 hover:bg-primary/20 nav-link gap-2"
-                      data-path="/intelligence"
+                      data-path="/app/intelligence"
                     >
                       <span>🔍</span>
                       <span>Intelligence</span>
@@ -211,9 +216,9 @@ export const renderer = jsxRenderer(({ children, title }: any, c: any) => {
                   {/* Bulk Whois — enabled */}
                   <li>
                     <a
-                      {...{ 'hx-get': '/whois', 'hx-target': '#page-content', 'hx-push-url': 'true', 'hx-swap': 'innerHTML' }}
+                      {...{ 'hx-get': '/app/whois', 'hx-target': '#page-content', 'hx-push-url': 'true', 'hx-swap': 'innerHTML' }}
                       class="py-1.5 hover:bg-primary/20 nav-link gap-2"
-                      data-path="/whois"
+                      data-path="/app/whois"
                     >
                       <span>🌐</span>
                       <span>Bulk Whois</span>
@@ -245,9 +250,9 @@ export const renderer = jsxRenderer(({ children, title }: any, c: any) => {
                       <div class="divider my-1 text-xs opacity-40">Admin</div>
                       <li>
                         <a
-                          {...{ 'hx-get': '/admin/auditlog', 'hx-target': '#page-content', 'hx-push-url': 'true', 'hx-swap': 'innerHTML' }}
+                          {...{ 'hx-get': '/app/admin/auditlog', 'hx-target': '#page-content', 'hx-push-url': 'true', 'hx-swap': 'innerHTML' }}
                           class="py-1.5 hover:bg-primary/20 nav-link gap-2"
-                          data-path="/admin/auditlog"
+                          data-path="/app/admin/auditlog"
                         >
                           <span>📋</span>
                           <span>Audit Log</span>
@@ -369,9 +374,9 @@ export const renderer = jsxRenderer(({ children, title }: any, c: any) => {
 
   // ── Active nav link sync ──────────────────────────────────────────────────
   function syncNav() {
-    var p = location.pathname.replace(/\\/$/, '') || '/';
+    var p = location.pathname.replace(/\\/$/, '') || '/app';
     document.querySelectorAll('.nav-link').forEach(function (el) {
-      var target = (el.getAttribute('data-path') || '').replace(/\\/$/, '') || '/';
+      var target = (el.getAttribute('data-path') || '').replace(/\\/$/, '') || '/app';
       el.classList.toggle('active', target === p);
     });
   }

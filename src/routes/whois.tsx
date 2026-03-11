@@ -322,7 +322,7 @@ whois.get('/', (c) => {
     e.preventDefault();
     var results = document.getElementById('whoisResults');
     results.innerHTML = '<div class="flex justify-center py-6"><span class="loading loading-spinner loading-lg"></span></div>';
-    fetch('/whois/api/lookup', { method: 'POST', body: new FormData(e.target) })
+    fetch('/app/whois/api/lookup', { method: 'POST', body: new FormData(e.target) })
       .then(function (r) { return r.text(); })
       .then(function (html) { results.innerHTML = html; bindActionBtns(); })
       .catch(function (err) {

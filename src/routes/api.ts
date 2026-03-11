@@ -2,6 +2,7 @@ import { Hono } from 'hono'
 import { checkAbuseIPDB, formatAbuseIPDBResult } from '../lib/abuseipdb'
 import { checkVirusTotal, formatVirusTotalResult } from '../lib/virustotal'
 import { checkOTX, formatOTXResult } from '../lib/otx'
+import { sendReportEmail, type MailerEnv } from '../lib/mailer'
 
 const api = new Hono()
 
@@ -91,6 +92,55 @@ api.post('/check', async (c) => {
       { error: error instanceof Error ? error.message : 'Internal server error' },
       500
     )
+  }
+})
+
+// ── POST /contact — public contact form (landing page & app report modal) ──
+api.post('/contact', async (c) => {
+  try {
+    const fd      = await c.req.formData()
+    const name    = String(fd.get('name') ?? '').trim().slice(0, 200)
+    const email   = String(fd.get('email') ?? '').trim().slice(0, 200)
+    const message = String(fd.get('message') ?? '').trim().slice(0, 4000)
+
+    if (!name || !email || !message) {
+      return c.json({ success: false, message: 'All fields are required.' }, 400)
+    }
+    // Basic email format guard
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      return c.json({ success: false, message: 'Invalid email address.' }, 400)
+    }
+
+    const env = c.env as MailerEnv
+    await sendReportEmail(env, name, email, message)
+    return c.json({ success: true, message: 'Message sent! Thank you.' })
+  } catch (err) {
+    console.error('Contact email error:', err)
+    return c.json({ success: false, message: err instanceof Error ? err.message : 'Failed to send message.' }, 500)
+  }
+})
+
+// Keep legacy /report alias for the in-app report modal
+api.post('/report', async (c) => {
+  try {
+    const fd      = await c.req.formData()
+    const name    = String(fd.get('name') ?? '').trim().slice(0, 200)
+    const email   = String(fd.get('email') ?? '').trim().slice(0, 200)
+    const message = String(fd.get('message') ?? '').trim().slice(0, 4000)
+
+    if (!name || !email || !message) {
+      return c.json({ success: false, message: 'All fields are required.' }, 400)
+    }
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      return c.json({ success: false, message: 'Invalid email address.' }, 400)
+    }
+
+    const env = c.env as MailerEnv
+    await sendReportEmail(env, name, email, message)
+    return c.json({ success: true, message: 'Message sent! Thank you.' })
+  } catch (err) {
+    console.error('Report email error:', err)
+    return c.json({ success: false, message: err instanceof Error ? err.message : 'Failed to send message.' }, 500)
   }
 })
 

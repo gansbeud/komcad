@@ -1289,7 +1289,7 @@ intelligence.get('/', (c) => {
     resultsArea.innerHTML = '<div class="flex justify-center py-6"><span class="loading loading-spinner loading-lg"></span></div>';
     var t0 = Date.now();
     try {
-      var response = await fetch('/intelligence/api/check', { method: 'POST', body: new FormData(form) });
+      var response = await fetch('/app/intelligence/api/check', { method: 'POST', body: new FormData(form) });
       var html = await response.text();
       var elapsed = (Date.now() - t0) / 1000;
       resultsArea.innerHTML = html;
