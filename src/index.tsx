@@ -1,409 +1,47 @@
 import { Hono } from 'hono'
-import { renderer } from './renderer'
-import { fetchAllNews } from './lib/rss'
-import intelligenceRoutes from './routes/intelligence'
-import dashboardMock from './routes/dashboard-mock'
-import whoisRoutes from './routes/whois'
-import authRoutes from './routes/auth'
-import auditlogRoutes from './routes/auditlog'
-import { sendReportEmail } from './lib/mailer'
+import { getCookie } from 'hono/cookie'
 import { verify } from 'hono/jwt'
-import { getCookie, deleteCookie } from 'hono/cookie'
+import { renderer } from './renderer'
+import authRoutes from './routes/auth'
+import intelligenceRoutes from './routes/intelligence'
+import whoisRoutes from './routes/whois'
+import auditlogRoutes from './routes/auditlog'
+import apiRoutes from './routes/api'
+import dashboardMockRoutes from './routes/dashboard-mock'
+import newsRoutes from './routes/news'
 
 const app = new Hono()
 
-// ── Report form rate limiter (in-memory, best-effort) ──────────────────────
-// Note: resets per Worker isolate restart. For persistent limits use CF Rate Limiting.
-const reportAttempts = new Map<string, { count: number; resetAt: number }>()
-const REPORT_MAX = 3
-const REPORT_WINDOW_MS = 60 * 60 * 1000 // 1 hour
-
-
-// ── AUTH — login/logout public routes (no JWT guard) ────────────────────────
+// ── Public auth routes (no JWT guard) — must be registered first ────────────
 app.route('/', authRoutes)
 
-// ── JWT guard — protects every path except /login ───────────────────────
+// ── JWT auth guard for all other routes ─────────────────────────────────────
 app.use('*', async (c, next) => {
   const path = c.req.path
   if (path === '/login' || path.startsWith('/login/') || path === '/logout') return next()
   const token = getCookie(c, 'komcad_token')
   if (!token) return c.redirect('/login')
   try {
-    const payload = await verify(token, (c.env as any)?.JWT_SECRET ?? process.env.JWT_SECRET ?? 'komcad-dev-secret', 'HS256')
-    c.set('username', payload.sub as string)
+    const env = c.env as any
+    const secret = env?.JWT_SECRET ?? process.env.JWT_SECRET ?? 'komcad-dev-secret'
+    const payload = await verify(token, secret, 'HS256') as any
+    c.set('username', payload.sub ?? 'User')
   } catch {
-    deleteCookie(c, 'komcad_token', { path: '/' })
     return c.redirect('/login')
   }
   return next()
 })
 
+// ── App layout middleware (authenticated routes only) ────────────────────────
 app.use('*', renderer)
 
-// ── JSON API — fetches RSS feeds server-side and returns structured news ──────
-app.get('/api/news', async (c) => {
-  try {
-    const items = await fetchAllNews()
-    return c.json(items)
-  } catch (err) {
-    return c.json({ error: err instanceof Error ? err.message : 'Failed to fetch news' }, 500)
-  }
-})
+// ── Protected routes ─────────────────────────────────────────────────────────
+app.route('/', dashboardMockRoutes)
 
-// ── Main route — Cybersecurity News Hub ──────────────────────────────────────
-app.get('/', (c) => {
-  return c.render(
-    <div class="space-y-5" id="news-hub">
-
-      {/* ── HEADER ── */}
-      <div class="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <h1 class="text-xl font-bold flex items-center gap-2">
-            📰 <span>Cybersecurity News Hub</span>
-          </h1>
-          <p class="text-xs opacity-50 mt-0.5">Single Pane of Glass — Real-time aggregation from top security sources</p>
-        </div>
-        <div class="flex items-center gap-2 flex-wrap">
-          <span class="text-xs opacity-40 italic" id="news-last-updated">Initialising…</span>
-          <button id="news-refresh-btn" class="btn btn-xs btn-outline gap-1">🔄 Refresh</button>
-        </div>
-      </div>
-
-      {/* ── SOURCE STAT MINI-CARDS ── */}
-      <div class="grid grid-cols-3 sm:grid-cols-5 gap-2" id="source-stats">
-        {['🔐','💻','🕵️','🔒','📡'].map((icon) => (
-          <div key={icon} class="skeleton h-16 rounded-lg"></div>
-        ))}
-      </div>
-
-      {/* ── FILTER BAR ── */}
-      <div class="flex flex-wrap gap-2 items-center">
-        <select id="filter-source" class="select select-sm w-auto min-w-40">
-          <option value="">All Sources</option>
-          <option>The Hacker News</option>
-          <option>BleepingComputer</option>
-          <option>Dark Reading</option>
-          <option>Krebs on Security</option>
-          <option>SANS ISC</option>
-        </select>
-        <select id="filter-level" class="select select-sm w-auto min-w-36">
-          <option value="">All Levels</option>
-          <option>Critical</option>
-          <option>High</option>
-          <option>Medium</option>
-          <option>Info</option>
-        </select>
-        <span class="badge badge-outline badge-sm" id="news-count">Loading…</span>
-        <span id="news-cache-badge" class="hidden badge badge-success badge-sm badge-soft">⚡ Cached</span>
-      </div>
-
-      {/* ── NEWS GRID (skeleton placeholders) ── */}
-      <div id="news-grid" class="grid gap-2 md:gap-4 grid-cols-1 md:grid-cols-2 xl:grid-cols-3">
-        {[1,2,3,4,5,6].map((i) => (
-          <div key={i} class="card bg-base-100 border border-base-300 shadow-sm">
-            <div class="card-body gap-2 md:gap-3 p-2 md:p-4">
-              <div class="skeleton h-3 w-1/3 rounded"></div>
-              <div class="skeleton h-5 w-full rounded"></div>
-              <div class="skeleton h-3 w-1/4 rounded"></div>
-              <div class="skeleton h-14 w-full rounded"></div>
-              <div class="flex gap-2 mt-1">
-                <div class="skeleton h-6 w-20 rounded"></div>
-                <div class="skeleton h-6 w-14 rounded"></div>
-              </div>
-            </div>
-          </div>
-        ))}
-      </div>
-
-      {/* ── CLIENT-SIDE NEWS ENGINE ── */}
-      <script dangerouslySetInnerHTML={{ __html: `
-(function () {
-  'use strict';
-
-  /* ── constants ──────────────────────────────────────── */
-  var CACHE_KEY    = 'komcad_news_v1';
-  var CACHE_TS_KEY = 'komcad_news_ts';
-  var TTL_MS       = 30 * 60 * 1000; // 30 minutes
-
-  var THREAT_BADGE = { Critical:'badge-error', High:'badge-warning', Medium:'badge-info', Info:'badge-ghost' };
-  var THREAT_ICON  = { Critical:'🔴', High:'🟠', Medium:'🔵', Info:'⚪' };
-  var SOURCE_COLOR = {
-    'The Hacker News'  :'text-error',
-    'BleepingComputer' :'text-warning',
-    'Dark Reading'     :'text-info',
-    'Krebs on Security':'text-success',
-    'SANS ISC'         :'text-secondary'
-  };
-
-  var allNews = [];
-
-  /* ── helpers ─────────────────────────────────────────── */
-  function esc(s) {
-    return String(s)
-      .replace(/&/g,'&amp;').replace(/</g,'&lt;')
-      .replace(/>/g,'&gt;').replace(/"/g,'&quot;');
-  }
-  function relTime(iso) {
-    var d = Date.now() - new Date(iso).getTime();
-    if (d < 0) return 'just now';
-    var m = Math.floor(d / 60000);
-    if (m < 1)  return 'just now';
-    if (m < 60) return m + ' min' + (m > 1 ? 's' : '') + ' ago';
-    var h = Math.floor(m / 60);
-    if (h < 24) return h + ' hr'  + (h > 1 ? 's' : '') + ' ago';
-    var dy = Math.floor(h / 24);
-    return dy + ' day' + (dy > 1 ? 's' : '') + ' ago';
-  }
-
-  /* ── card builder ────────────────────────────────────── */
-  function buildCard(item, idx) {
-    var tc  = THREAT_BADGE[item.threatLevel] || 'badge-ghost';
-    var ti  = THREAT_ICON[item.threatLevel]  || '⚪';
-    var sc  = SOURCE_COLOR[item.source]      || '';
-    var id  = 'nc-' + idx;
-    return [
-      '<div class="card bg-base-100 border border-base-300 shadow-sm',
-      ' hover:shadow-lg hover:-translate-y-0.5 transition-all duration-200 news-card"',
-      ' data-source="'+ esc(item.source) +'" data-level="'+ esc(item.threatLevel) +'">',
-      '<div class="card-body gap-2 p-4">',
-
-        /* source + threat badge */
-        '<div class="flex items-center justify-between gap-2 flex-wrap">',
-          '<span class="text-xs font-semibold '+ sc +' flex items-center gap-1">',
-            '<span class="text-sm">'+ esc(item.sourceIcon) +'</span>',
-            esc(item.source),
-          '</span>',
-          '<span class="badge badge-sm '+ tc +'">'+ ti +' '+ esc(item.threatLevel) +'</span>',
-        '</div>',
-
-        /* title */
-        '<h3 class="font-bold text-sm leading-snug">',
-          '<a href="'+ esc(item.url) +'" target="_blank" rel="noopener"',
-          ' class="hover:text-primary transition-colors">'+ esc(item.title) +'</a>',
-        '</h3>',
-
-        /* timestamp */
-        '<p class="text-xs opacity-40">'+ relTime(item.publishedAt) +'</p>',
-
-        /* description */
-        '<p class="text-xs opacity-70 leading-relaxed">'+ esc(item.description) +'</p>',
-
-        /* action row */
-        '<div class="card-actions justify-end items-center mt-1">',
-          '<a href="'+ esc(item.url) +'" target="_blank" rel="noopener"',
-          ' class="btn btn-xs btn-outline">↗ Open</a>',
-        '</div>',
-
-      '</div></div>'
-    ].join('');
-  }
-
-  /* ── filter + render grid ───────────────────────────── */
-  function applyFilters() {
-    var srcEl = document.getElementById('filter-source');
-    var lvlEl = document.getElementById('filter-level');
-    var src = srcEl ? srcEl.value : '';
-    var lvl = lvlEl ? lvlEl.value : '';
-
-    var filtered = allNews.filter(function (n) {
-      return (!src || n.source === src) && (!lvl || n.threatLevel === lvl);
-    });
-
-    var grid = document.getElementById('news-grid');
-    if (!grid) return;
-
-    if (filtered.length === 0) {
-      grid.innerHTML = '<div class="col-span-full text-center py-16 opacity-40 text-sm">No articles match your filters.</div>';
-    } else {
-      grid.innerHTML = filtered.map(buildCard).join('');
-    }
-
-    var cntEl = document.getElementById('news-count');
-    if (cntEl) cntEl.textContent = filtered.length + ' articles';
-  }
-
-  /* ── source stats ────────────────────────────────────── */
-  function renderStats() {
-    var counts = {}, icons = {};
-    allNews.forEach(function (n) {
-      counts[n.source] = (counts[n.source] || 0) + 1;
-      icons[n.source]  = n.sourceIcon;
-    });
-    var el = document.getElementById('source-stats');
-    if (!el) return;
-    el.innerHTML = Object.keys(counts).map(function (src) {
-      var short = src.split(' ').slice(-1)[0];
-      return '<div class="bg-base-100 rounded-lg border border-base-300 p-2 text-center">'
-        + '<div class="text-xl">'+ esc(icons[src]||'📰') +'</div>'
-        + '<div class="text-xs opacity-50 truncate leading-tight">'+ esc(short) +'</div>'
-        + '<div class="font-bold text-sm text-primary">'+ counts[src] +'</div>'
-        + '</div>';
-    }).join('');
-  }
-
-  /* ── localStorage cache (30 min TTL) ────────────────── */
-  function getCached() {
-    try {
-      var ts = localStorage.getItem(CACHE_TS_KEY);
-      var d  = localStorage.getItem(CACHE_KEY);
-      if (ts && d && (Date.now() - parseInt(ts, 10)) < TTL_MS) return JSON.parse(d);
-    } catch(e) {}
-    return null;
-  }
-  function setCache(data) {
-    try {
-      localStorage.setItem(CACHE_KEY, JSON.stringify(data));
-      localStorage.setItem(CACHE_TS_KEY, String(Date.now()));
-    } catch(e) {}
-  }
-  function clearCache() {
-    try { localStorage.removeItem(CACHE_KEY); localStorage.removeItem(CACHE_TS_KEY); } catch(e) {}
-  }
-
-  /* ── UI helpers ──────────────────────────────────────── */
-  function setUpdatedLabel(fromCache) {
-    var el = document.getElementById('news-last-updated');
-    var now = new Date().toLocaleTimeString('en-GB', { hour:'2-digit', minute:'2-digit' });
-    if (el) el.textContent = 'Updated at '+ now + (fromCache ? ' (cached)' : '');
-    var badge = document.getElementById('news-cache-badge');
-    if (badge) badge.classList.toggle('hidden', !fromCache);
-  }
-  function showSkeletons() {
-    var g = document.getElementById('news-grid');
-    if (!g) return;
-    var sk = '';
-    for (var i = 0; i < 6; i++) {
-      sk += '<div class="card bg-base-100 border border-base-300 shadow-sm">'
-          + '<div class="card-body gap-2 md:gap-3 p-2 md:p-4">'
-          + '<div class="skeleton h-3 w-1/3 rounded"></div>'
-          + '<div class="skeleton h-5 w-full rounded"></div>'
-          + '<div class="skeleton h-3 w-1/4 rounded"></div>'
-          + '<div class="skeleton h-14 w-full rounded"></div>'
-          + '<div class="flex gap-2 mt-1">'
-          + '<div class="skeleton h-6 w-20 rounded"></div>'
-          + '<div class="skeleton h-6 w-14 rounded"></div>'
-          + '</div></div></div>';
-    }
-    g.innerHTML = sk;
-  }
-
-  /* ── main fetch flow ─────────────────────────────────── */
-  function loadNews(force) {
-    if (!force) {
-      var cached = getCached();
-      if (cached) { allNews = cached; renderStats(); applyFilters(); setUpdatedLabel(true); return; }
-    }
-    showSkeletons();
-    var cntEl = document.getElementById('news-count');
-    if (cntEl) cntEl.textContent = 'Fetching…';
-
-    fetch('/api/news')
-      .then(function(r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
-      .then(function(data) {
-        setCache(data);
-        allNews = data;
-        renderStats();
-        applyFilters();
-        setUpdatedLabel(false);
-      })
-      .catch(function(err) {
-        var g = document.getElementById('news-grid');
-        if (g) g.innerHTML = '<div class="col-span-full"><div role="alert" class="alert alert-error alert-soft">'
-          + '⚠️ Failed to load news: '+ esc(String(err))
-          + '. <button onclick="window.__newsHubRefresh()" class="btn btn-xs btn-error ml-2">Retry</button>'
-          + '</div></div>';
-        var cntEl2 = document.getElementById('news-count');
-        if (cntEl2) cntEl2.textContent = 'Error';
-      });
-  }
-
-  /* ── public refresh ──────────────────────────────────── */
-  window.__newsHubRefresh = function () { clearCache(); loadNews(true); };
-
-  /* ── bind controls ───────────────────────────────────── */
-  function bindControls() {
-    var rb  = document.getElementById('news-refresh-btn');
-    var sf  = document.getElementById('filter-source');
-    var lf  = document.getElementById('filter-level');
-    if (rb) rb.addEventListener('click', function() { clearCache(); loadNews(true); });
-    if (sf) sf.addEventListener('change', applyFilters);
-    if (lf) lf.addEventListener('change', applyFilters);
-  }
-
-  /* ── boot (full load + htmx partial nav) ────────────── */
-  function init() { bindControls(); loadNews(false); }
-
-  if (document.readyState === 'loading') { document.addEventListener('DOMContentLoaded', init); }
-  else { init(); }
-  /* htmx re-executes inline scripts on swap, so init() runs again on re-navigation */
-})();
-      ` }} />
-    </div>,
-    // @ts-expect-error
-    { title: 'News Hub' }
-  )
-})
-
-// ── Preserve original dashboard as mock ──────────────────────────────────────
-app.route('/dashboard-mock', dashboardMock)
-
-// ── Intelligence tools ────────────────────────────────────────────────────────
+app.route('/news', newsRoutes)
 app.route('/intelligence', intelligenceRoutes)
 app.route('/whois', whoisRoutes)
-
-// ── Admin — audit log, accessible only by ADMIN_USER ────────────────────────
-app.use('/admin/*', async (c, next) => {
-  const username = (c as any).get?.('username') as string
-  const adminUser = (c.env as any)?.ADMIN_USER ?? process.env.ADMIN_USER ?? 'administrator'
-  if (!username || username !== adminUser) {
-    return c.html(
-      <div class="flex flex-col items-center justify-center min-h-screen gap-4">
-        <div class="text-6xl">🚫</div>
-        <h1 class="text-2xl font-bold">Access Denied</h1>
-        <p class="text-base-content/60">This page is restricted to administrators.</p>
-        <a href="/" class="btn btn-primary btn-sm">Go Home</a>
-      </div>,
-      403
-    )
-  }
-  return next()
-})
 app.route('/admin', auditlogRoutes)
-
-// ── Report / Contact form submission ─────────────────────────────────────────
-app.post('/api/report', async (c) => {
-  // Rate limit: max REPORT_MAX submissions per IP per hour
-  const clientIp = c.req.header('CF-Connecting-IP') ?? c.req.header('X-Forwarded-For')?.split(',')[0]?.trim() ?? 'unknown'
-  const now = Date.now()
-  const current = reportAttempts.get(clientIp)
-  if (current && now < current.resetAt) {
-    if (current.count >= REPORT_MAX) {
-      return c.json({ success: false, message: 'Too many submissions. Please try again later.' }, 429)
-    }
-    current.count++
-  } else {
-    reportAttempts.set(clientIp, { count: 1, resetAt: now + REPORT_WINDOW_MS })
-  }
-
-  try {
-    const form    = await c.req.formData()
-    const name    = (form.get('name')    as string ?? '').trim()
-    const email   = (form.get('email')   as string ?? '').trim()
-    const message = (form.get('message') as string ?? '').trim()
-
-    if (!name || !email || !message) {
-      return c.json({ success: false, message: 'All fields are required.' }, 400)
-    }
-
-    await sendReportEmail(c.env as any, name, email, message)
-    return c.json({ success: true, message: 'Your message has been sent. Thank you!' })
-  } catch (err) {
-    console.error('Report email error:', err)
-    return c.json(
-      { success: false, message: err instanceof Error ? err.message : 'Failed to send message.' },
-      500
-    )
-  }
-})
+app.route('/api', apiRoutes)
 
 export default app

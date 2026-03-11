@@ -7,7 +7,7 @@ export const renderer = jsxRenderer(({ children, title }: any, c: any) => {
   const isAdmin = username !== 'User' && username === (process.env.ADMIN_USER ?? 'administrator')
   // HTMX partial navigation: return only content + OOB breadcrumb swap
   if (c.req.header('HX-Request')) {
-    c.header('HX-Title', title ?? 'News Hub')
+    c.header('HX-Title', title ?? 'Dashboard')
     return (
       <>
         {/* OOB-swap breadcrumb so it stays in sync without full reload */}
@@ -16,7 +16,7 @@ export const renderer = jsxRenderer(({ children, title }: any, c: any) => {
           {...{ 'hx-swap-oob': 'true' }}
           class="text-primary font-semibold"
         >
-          {title ?? 'News Hub'}
+          {title ?? 'Dashboard'}
         </span>
         {children}
       </>
@@ -62,7 +62,7 @@ export const renderer = jsxRenderer(({ children, title }: any, c: any) => {
                     </li>
                     <li>
                       <span id="breadcrumb-current" class="text-primary font-semibold">
-                        {title ?? 'News Hub'}
+                        {title ?? 'Dashboard'}
                       </span>
                     </li>
                   </ul>
@@ -172,12 +172,24 @@ export const renderer = jsxRenderer(({ children, title }: any, c: any) => {
               <div class="flex-1 overflow-y-auto">
                 <ul class="menu w-full px-2 py-2 gap-0.5 text-sm">
 
-                  {/* News Hub — main page */}
+                  {/* Dashboard — main page */}
                   <li>
                     <a
                       {...{ 'hx-get': '/', 'hx-target': '#page-content', 'hx-push-url': 'true', 'hx-swap': 'innerHTML' }}
                       class="py-1.5 hover:bg-primary/20 nav-link gap-2"
                       data-path="/"
+                    >
+                      <span>📊</span>
+                      <span>Dashboard</span>
+                    </a>
+                  </li>
+
+                  {/* News Hub */}
+                  <li>
+                    <a
+                      {...{ 'hx-get': '/news', 'hx-target': '#page-content', 'hx-push-url': 'true', 'hx-swap': 'innerHTML' }}
+                      class="py-1.5 hover:bg-primary/20 nav-link gap-2"
+                      data-path="/news"
                     >
                       <span>📰</span>
                       <span>News Hub</span>

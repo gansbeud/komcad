@@ -4,6 +4,15 @@ const dashboardMock = new Hono()
 
 dashboardMock.get('/', (c) => {
   return c.render(
+    <div class="relative">
+      {/* ── UNDER DEVELOPMENT GLASS OVERLAY ── */}
+      <div class="absolute inset-0 z-20 backdrop-blur-sm bg-base-100/50 flex flex-col items-center justify-center rounded-xl pointer-events-none">
+        <div class="card bg-base-100/80 border border-base-300 shadow-2xl px-8 py-6 text-center max-w-xs pointer-events-auto">
+          <div class="text-5xl mb-3">🚧</div>
+          <h2 class="text-lg font-bold mb-1">Under Development</h2>
+          <p class="text-sm opacity-60">This dashboard is currently being built. Check back soon.</p>
+        </div>
+      </div>
     <div class="space-y-6">
       {/* HERO ALERT WITH CLOSE */}
       <div class="alert alert-error alert-soft shadow-lg border border-error/30">
@@ -340,7 +349,10 @@ dashboardMock.get('/', (c) => {
           </div>
         </div>
       </div>
+    </div>
     </div>,
+    // @ts-expect-error — Hono ContextRenderer not extended
+    { title: 'Dashboard' }
   )
 })
 
