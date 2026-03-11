@@ -103,7 +103,7 @@ export const renderer = jsxRenderer(({ children, title }: any, c: any) => {
                           class="theme-controller btn btn-xs btn-outline justify-start"
                           value={t}
                           aria-label={t.charAt(0).toUpperCase() + t.slice(1)}
-                          {...(t === 'dark' ? { checked: true } : {})}
+                          {...(t === 'dim' ? { checked: true } : {})}
                         />
                       </li>
                     ))}
@@ -160,6 +160,7 @@ export const renderer = jsxRenderer(({ children, title }: any, c: any) => {
               {/* Sidebar header */}
               <div class="p-3 border-b border-base-300 shrink-0">
                 <div class="flex items-center gap-2">
+                  <label for="sidebar" class="btn btn-square btn-ghost btn-xs hidden lg:flex" aria-label="Collapse sidebar">☰</label>
                   <div class="badge badge-primary badge-sm">◆</div>
                   <div>
                     <div class="font-bold text-primary text-sm leading-tight">KOMCAD</div>

@@ -314,12 +314,12 @@ intelligence.post('/api/check', async (c) => {
                             )}
                             {combinedSources.includes('VirusTotal') && r.vt && (
                               <span class={`badge badge-xs font-mono ${(r.vt.last_analysis_stats?.malicious ?? 0) > 0 ? 'badge-error' : (r.vt.last_analysis_stats?.suspicious ?? 0) > 0 ? 'badge-warning' : 'badge-outline'}`}>
-                                VT:{r.vt.last_analysis_stats?.malicious ?? 0}M/{r.vt.last_analysis_stats?.suspicious ?? 0}S
+                                VT:{r.vt.last_analysis_stats?.malicious ?? 0}/{r.vt.last_analysis_stats?.suspicious ?? 0}/{r.vt.last_analysis_stats?.harmless ?? 0}
                               </span>
                             )}
                             {combinedSources.includes('OTX Alienvault') && r.otx && (
                               <span class={`badge badge-xs font-mono ${r.otx.status === 'malicious' ? 'badge-error' : r.otx.status === 'suspicious' ? 'badge-warning' : 'badge-outline'}`}>
-                                OTX:{r.otx.pulse_count}p
+                                OTX:{r.otx.pulse_count} Pul
                               </span>
                             )}
                             {combinedSources.includes('ThreatFOX') && r.tfox && r.tfox.found && (
@@ -757,7 +757,7 @@ intelligence.post('/api/check', async (c) => {
                 <td class="text-xs">{bvWL(d.whitelisted)}</td>
                 <td class={`text-xs font-semibold ${repColor}`}>{v(d.reputation)}</td>
                 <td class="text-xs">{v(d.pulse_count)}</td>
-                <td class="text-xs max-w-72 truncate" title={pulseNamesList}>{pulseNamesList}</td>
+                <td class="text-xs truncate max-w-72" title={pulseNamesList}>{pulseNamesList}</td>
               </tr>
             )
           })}
@@ -803,7 +803,7 @@ intelligence.post('/api/check', async (c) => {
               <tr key={idx} class="hover:bg-base-200/50">
                 <td class="font-mono text-xs">{v(d.indicator)}</td>
                 <td><span class={`badge badge-sm font-bold ${statusColor}`}>{v(d.status)}</span></td>
-                <td class="text-xs max-w-40 truncate" title={d.found ? v(d.top_malware) : '-'}>
+                <td class="text-xs truncate max-w-40" title={d.found ? v(d.top_malware) : '-'}>
                   {d.found ? v(d.top_malware) : <span class="opacity-40 italic">Not found in ThreatFOX</span>}
                 </td>
                 <td>
@@ -975,7 +975,7 @@ intelligence.get('/', (c) => {
     <div class="space-y-6">
       {/* PAGE HEADER */}
       <div>
-        <h1 class="text-4xl font-bold mb-2">Threat Intelligence Checker</h1>
+        <h1 class="text-4xl font-bold mb-2">Threat Intelligence</h1>
         <p class="text-base-content/70">
           Analyze indicators across multiple threat intelligence sources
         </p>

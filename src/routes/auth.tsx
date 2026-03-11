@@ -95,7 +95,7 @@ auth.get('/logout', async (c) => {
 // ── Login page HTML ────────────────────────────────────────────────────────
 function loginPage(hasError: boolean): string {
   return `<!DOCTYPE html>
-<html data-theme="dark">
+<html data-theme="dim">
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
