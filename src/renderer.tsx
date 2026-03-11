@@ -138,7 +138,7 @@ export const renderer = jsxRenderer(({ children, title }: any, c: any) => {
             </div>
 
             {/* MAIN CONTENT */}
-            <main id="page-content" class="p-4 md:p-6 flex-1">
+            <main id="page-content" class="p-4 md:p-6 flex-1 overflow-y-auto">
               {children}
             </main>
 
