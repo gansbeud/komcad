@@ -98,10 +98,10 @@ app.get('/', (c) => {
       </div>
 
       {/* ── NEWS GRID (skeleton placeholders) ── */}
-      <div id="news-grid" class="grid gap-4 grid-cols-1 md:grid-cols-2 xl:grid-cols-3">
+      <div id="news-grid" class="grid gap-2 md:gap-4 grid-cols-1 md:grid-cols-2 xl:grid-cols-3">
         {[1,2,3,4,5,6].map((i) => (
           <div key={i} class="card bg-base-100 border border-base-300 shadow-sm">
-            <div class="card-body gap-3 p-4">
+            <div class="card-body gap-2 md:gap-3 p-2 md:p-4">
               <div class="skeleton h-3 w-1/3 rounded"></div>
               <div class="skeleton h-5 w-full rounded"></div>
               <div class="skeleton h-3 w-1/4 rounded"></div>
@@ -274,7 +274,7 @@ app.get('/', (c) => {
     var sk = '';
     for (var i = 0; i < 6; i++) {
       sk += '<div class="card bg-base-100 border border-base-300 shadow-sm">'
-          + '<div class="card-body gap-3 p-4">'
+          + '<div class="card-body gap-2 md:gap-3 p-2 md:p-4">'
           + '<div class="skeleton h-3 w-1/3 rounded"></div>'
           + '<div class="skeleton h-5 w-full rounded"></div>'
           + '<div class="skeleton h-3 w-1/4 rounded"></div>'

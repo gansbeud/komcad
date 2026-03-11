@@ -157,7 +157,7 @@ whois.get('/', (c) => {
       </div>
 
       {/* Stats */}
-      <div class="grid gap-4 grid-cols-1 sm:grid-cols-3">
+      <div class="grid gap-2 md:gap-4 grid-cols-1 sm:grid-cols-3">
         {[
           { icon: '🌐', label: 'Data Source', value: 'ipinfo.io' },
           { icon: '⚡', label: 'API Type', value: 'Lite (Free)' },
@@ -173,7 +173,7 @@ whois.get('/', (c) => {
 
       {/* Lookup form */}
       <div class="card bg-base-100 shadow-md border border-base-300">
-        <div class="card-body gap-4">
+        <div class="card-body gap-2 md:gap-4 p-2 md:p-4">
           <h2 class="card-title text-lg">🔍 Bulk IP Lookup</h2>
 
           <form id="whoisForm">

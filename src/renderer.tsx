@@ -28,13 +28,14 @@ export const renderer = jsxRenderer(({ children, title }: any, c: any) => {
       <head>
         <meta charset="utf-8" />
         <title>{title ?? 'KOMCAD'}</title>
+        <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' fill='white'/><text y='.9em' font-size='90' fill='black'>&#x25C6;</text></svg>" />
         <link rel="stylesheet" href="/src/style.css" />
         <script src="https://unpkg.com/htmx.org@2.0.4/dist/htmx.min.js" />
       </head>
 
       <body class="bg-base-200">
 
-        <div class="drawer lg:drawer-open">
+        <div class="drawer" id="app-drawer">
 
           <input id="sidebar" type="checkbox" class="drawer-toggle" />
 
@@ -44,14 +45,13 @@ export const renderer = jsxRenderer(({ children, title }: any, c: any) => {
             {/* NAVBAR */}
             <div class="navbar bg-base-100 border-b border-base-300 shadow-md sticky top-0 z-40 min-h-12 py-1">
 
-              <div class="flex-none lg:hidden">
-                <label for="sidebar" class="btn btn-square btn-ghost btn-sm">☰</label>
-              </div>
-
-              {/* Breadcrumb */}
-              <div class="flex-1 px-4">
+              {/* Breadcrumb with integrated hamburger */}
+              <div class="flex-1 px-2 lg:px-4">
                 <div class="breadcrumbs text-sm">
                   <ul>
+                    <li>
+                      <button id="hamburgerBtn" class="btn btn-square btn-ghost btn-sm" title="Toggle sidebar">☰</button>
+                    </li>
                     <li>
                       <a
                         {...{ 'hx-get': '/', 'hx-target': '#page-content', 'hx-push-url': 'true', 'hx-swap': 'innerHTML' }}
@@ -160,7 +160,6 @@ export const renderer = jsxRenderer(({ children, title }: any, c: any) => {
               {/* Sidebar header */}
               <div class="p-3 border-b border-base-300 shrink-0">
                 <div class="flex items-center gap-2">
-                  <label for="sidebar" class="btn btn-square btn-ghost btn-xs hidden lg:flex" aria-label="Collapse sidebar">☰</label>
                   <div class="badge badge-primary badge-sm">◆</div>
                   <div>
                     <div class="font-bold text-primary text-sm leading-tight">KOMCAD</div>
@@ -209,7 +208,7 @@ export const renderer = jsxRenderer(({ children, title }: any, c: any) => {
                     </a>
                   </li>
 
-                  <div class="divider my-1 text-xs opacity-40">Coming Soon</div>
+                  <div class="divider my-1 text-xs font-bold">Coming Soon</div>
 
                   {/* Disabled items */}
                   {[
@@ -249,9 +248,9 @@ export const renderer = jsxRenderer(({ children, title }: any, c: any) => {
               </div>
 
               {/* Sidebar footer — only report button */}
-              <div class="border-t border-base-300 p-2 shrink-0">
+              <div class="border-t border-base-300 px-2 py-1.5 shrink-0">
                 <button
-                  class="btn btn-primary btn-sm w-full"
+                  class="btn btn-primary btn-xs w-full"
                   onclick="document.getElementById('report_modal').showModal()"
                 >
                   📬 Report Problem / Contact Me
@@ -334,6 +333,28 @@ export const renderer = jsxRenderer(({ children, title }: any, c: any) => {
         {/* ── SCRIPTS ── */}
         <script dangerouslySetInnerHTML={{ __html: `
 (function () {
+  // ── Sidebar toggle ────────────────────────────────────────────────────────
+  (function () {
+    var drawer = document.getElementById('app-drawer');
+    var toggle = document.getElementById('sidebar');
+    var btn    = document.getElementById('hamburgerBtn');
+    if (!drawer || !toggle || !btn) return;
+    // Default open on desktop
+    if (window.innerWidth >= 1024) {
+      drawer.classList.add('drawer-open');
+      toggle.checked = true;
+    }
+    // Hamburger click: toggle
+    btn.addEventListener('click', function () {
+      var isOpen = drawer.classList.toggle('drawer-open');
+      toggle.checked = isOpen;
+    });
+    // Mobile overlay tap: keep class in sync with checkbox
+    toggle.addEventListener('change', function () {
+      drawer.classList.toggle('drawer-open', toggle.checked);
+    });
+  })();
+
   // ── Active nav link sync ──────────────────────────────────────────────────
   function syncNav() {
     var p = location.pathname.replace(/\\/$/, '') || '/';

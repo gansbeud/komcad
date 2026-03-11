@@ -5,6 +5,11 @@ import { checkOTX, formatOTXResult } from '../lib/otx'
 import { checkThreatFox, formatThreatFoxResult } from '../lib/threatfox'
 import { logCheckEvents } from '../lib/checklog'
 
+function FlagSpan({ cc }: { cc: string }) {
+  if (!cc || cc.length < 2) return null
+  return <span class={`fi fi-${cc.toLowerCase().slice(0, 2)} me-1`}></span>
+}
+
 const intelligence = new Hono()
 
 // POST /api/check — returns an HTML fragment injected into #resultsArea
@@ -270,13 +275,13 @@ intelligence.post('/api/check', async (c) => {
               </div>
             </div>
 
-            <div class="p-4 space-y-4">
+            <div class="p-2 md:p-4 space-y-4">
               {/* Verdict summary */}
               <div class="flex flex-wrap gap-2 items-center">
                 <span class="text-xs font-semibold text-base-content/50 uppercase tracking-wider">Verdicts</span>
-                {malC > 0 && <span class="badge badge-error font-bold">🔴 {malC} Malicious</span>}
-                {susC > 0 && <span class="badge badge-warning font-bold">🟡 {susC} Suspicious</span>}
-                {cleanC > 0 && <span class="badge badge-success">🟢 {cleanC} Clean</span>}
+                {malC > 0 && <span class="badge badge-error font-bold">🔴 {malC} Malicious Indicator{malC > 1 ? 's' : ''}</span>}
+                {susC > 0 && <span class="badge badge-warning font-bold">🟡 {susC} Suspicious Indicator{susC > 1 ? 's' : ''}</span>}
+                {cleanC > 0 && <span class="badge badge-success">🟢 {cleanC} Clean Indicator{cleanC > 1 ? 's' : ''}</span>}
               </div>
 
               {/* Per-indicator summary cards */}
@@ -349,31 +354,31 @@ intelligence.post('/api/check', async (c) => {
                     {countries.length > 0 && (
                       <div class="rounded-lg bg-base-200/60 px-3 py-2">
                         <p class="text-xs font-semibold text-base-content/50 mb-1">🌍 Countries</p>
-                        <p class="text-xs font-mono">{countries.join(', ')}</p>
+                        <p class="text-xs font-mono">{countries.map((cc, i) => <span><FlagSpan cc={cc} />{cc}{i < countries.length - 1 ? ' · ' : ''}</span>)}</p>
                       </div>
                     )}
                     {isps.length > 0 && (
                       <div class="rounded-lg bg-base-200/60 px-3 py-2">
                         <p class="text-xs font-semibold text-base-content/50 mb-1">🏢 ISPs</p>
-                        <p class="text-xs font-mono">{isps.join(' · ')}</p>
+                        <p class="text-xs font-mono max-w-xs break-words">{isps.join(' · ')}</p>
                       </div>
                     )}
                     {domains.length > 0 && (
                       <div class="rounded-lg bg-base-200/60 px-3 py-2">
                         <p class="text-xs font-semibold text-base-content/50 mb-1">🌐 Domains / RDAP</p>
-                        <p class="text-xs font-mono">{domains.join(' · ')}</p>
+                        <p class="text-xs font-mono max-w-xs break-words">{domains.join(' · ')}</p>
                       </div>
                     )}
                     {uniquePulses.length > 0 && (
                       <div class="rounded-lg bg-base-200/60 px-3 py-2">
                         <p class="text-xs font-semibold text-base-content/50 mb-1">📡 OTX Pulses</p>
-                        <p class="text-xs font-mono">{uniquePulses.slice(0, 5).join(' · ')}{uniquePulses.length > 5 ? ` +${uniquePulses.length - 5} more` : ''}</p>
+                        <p class="text-xs font-mono max-w-xs break-words">{uniquePulses.slice(0, 5).join(' · ')}{uniquePulses.length > 5 ? ` +${uniquePulses.length - 5} more` : ''}</p>
                       </div>
                     )}
                     {malware.length > 0 && (
                       <div class="rounded-lg bg-error/10 border border-error/20 px-3 py-2 sm:col-span-2">
                         <p class="text-xs font-semibold text-error/70 mb-1">☠ ThreatFOX Malware Families</p>
-                        <p class="text-xs font-mono text-error">{malware.join(' · ')}</p>
+                        <p class="text-xs font-mono text-error max-w-xs break-words">{malware.join(' · ')}</p>
                       </div>
                     )}
                   </div>
@@ -514,13 +519,13 @@ intelligence.post('/api/check', async (c) => {
 
           {renderCombinedCorrelation()}
 
-          <details class="group border border-base-300 rounded-lg overflow-hidden">
+          <details class="group border border-base-300 rounded-lg">
             <summary class="flex items-center gap-2 cursor-pointer select-none bg-base-200/50 px-3 py-2 text-sm font-semibold text-base-content/80 hover:bg-base-200 transition-colors list-none">
               <span class="inline-block transition-transform duration-200 group-open:rotate-90 text-xs">▶</span>
               Detailed Results Table
               <span class="badge badge-ghost badge-xs ml-auto">click to expand</span>
             </summary>
-            <div class="overflow-x-auto">
+            <div class="overflow-x-auto w-full">
               <div class="min-w-max">
                 {renderCombinedTable()}
               </div>
@@ -629,7 +634,7 @@ intelligence.post('/api/check', async (c) => {
                 <td class="text-xs">{bv(d.isTor)}</td>
                 <td><span class={`badge badge-sm font-bold ${abuseBadge}`}>{abuseScore}%</span></td>
                 <td class="text-xs">{v(d.totalReports)}</td>
-                <td class="text-xs">{v(d.countryCode)}</td>
+                <td class="text-xs"><FlagSpan cc={d.countryCode} />{v(d.countryCode)}</td>
                 <td class="text-xs">{v(d.countryName)}</td>
                 <td class="text-xs truncate max-w-40" title={v(d.isp)}>{v(d.isp)}</td>
                 <td class="text-xs">{v(d.domain)}</td>
@@ -697,7 +702,7 @@ intelligence.post('/api/check', async (c) => {
                 <td><span class={`badge badge-sm font-bold ${ (st.suspicious ?? 0) > 0 ? 'badge-warning' : 'badge-outline'}`}>{st.suspicious ?? 0}</span></td>
                 <td><span class={`badge badge-sm font-bold ${ (st.harmless ?? 0) > 0 ? 'badge-success' : 'badge-outline'}`}>{st.harmless ?? 0}</span></td>
                 <td class="text-xs">{v(d.rdap_name)}</td>
-                <td class="text-xs">{v(d.country)}</td>
+                <td class="text-xs"><FlagSpan cc={d.country} />{v(d.country)}</td>
                 <td class="text-xs truncate max-w-32" title={v(d.as_owner)}>{v(d.as_owner)}</td>
                 <td class="text-xs text-success font-semibold">{d.total_votes ? v(d.total_votes.harmless) : '-'}</td>
                 <td class="text-xs text-error font-semibold">{d.total_votes ? v(d.total_votes.malicious) : '-'}</td>
@@ -859,7 +864,7 @@ intelligence.post('/api/check', async (c) => {
       const threatScore = Math.round((malC / valid.length) * 100)
       const scoreColor = threatScore > 60 ? 'badge-error' : threatScore > 20 ? 'badge-warning' : 'badge-success'
       return (
-        <div class="rounded-lg border border-base-300 bg-base-200/50 p-4 space-y-3">
+        <div class="rounded-lg border border-base-300 bg-base-200/50 p-2 md:p-4 space-y-3">
           <div class="flex items-center gap-2 flex-wrap">
             <p class="font-bold text-sm text-base-content/90">🔗 Correlation Analysis</p>
             <span class={`badge badge-sm font-bold ${scoreColor}`}>Threat Score {threatScore}%</span>
@@ -874,7 +879,7 @@ intelligence.post('/api/check', async (c) => {
           {countries.length > 0 && (
             <p class="text-xs">
               <span class="text-base-content/60 font-semibold">Countries: </span>
-              <span class="font-mono">{countries.join(', ')}</span>
+              <span class="font-mono">{countries.map((cc, i) => <span><FlagSpan cc={cc} />{cc}{i < countries.length - 1 ? ' · ' : ''}</span>)}</span>
             </p>
           )}
           {isps.length > 0 && (
@@ -930,7 +935,7 @@ intelligence.post('/api/check', async (c) => {
               Raw JSON Response
               <span class="badge badge-ghost badge-xs ml-auto">click to collapse</span>
             </summary>
-            <pre class="text-xs font-mono text-base-content bg-base-300/20 p-4 overflow-x-auto max-h-80 overflow-y-auto border-t border-base-300">{JSON.stringify(results[0].result, null, 2)}</pre>
+            <pre class="text-xs font-mono text-base-content bg-base-300/20 p-2 md:p-4 overflow-x-auto max-h-80 overflow-y-auto border-t border-base-300">{JSON.stringify(results[0].result, null, 2)}</pre>
           </details>
         )}
 
@@ -946,7 +951,7 @@ intelligence.post('/api/check', async (c) => {
           <button class="btn btn-sm btn-outline" id="newCheckBtn">↩ New Check</button>
           <button class="btn btn-sm btn-outline" id="copyTableBtn">📋 Copy to Clipboard</button>
           <button class="btn btn-sm btn-outline" id="exportCsvBtn">⬇ Export to CSV</button>
-          <button class="btn btn-sm btn-outline" id="copyPtmBtn">🔗 Copy Formatted IP</button>
+          <button class="btn btn-sm btn-outline" id="copyFormtdBtn">🔗 Copy Formatted IP</button>
         </div>
 
         {/* Hidden JSON payload for client-side button actions */}
@@ -982,7 +987,7 @@ intelligence.get('/', (c) => {
       </div>
 
       {/* STATS ROW */}
-      <div class="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-4">
+      <div class="grid gap-2 md:gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-4">
         <div class="stat bg-base-100 shadow-md border border-base-300 rounded-lg">
           <div class="stat-figure text-3xl">📊</div>
           <div class="stat-title text-sm opacity-70">Sources</div>
@@ -1011,7 +1016,7 @@ intelligence.get('/', (c) => {
 
       {/* CHECKER CARD */}
       <div class="card bg-base-100 shadow-md border border-base-300">
-        <div class="card-body gap-5">
+        <div class="card-body gap-3 md:gap-5 overflow-hidden">
           <h2 class="card-title">🔍 Check Indicators</h2>
 
           <form id="checkForm">
@@ -1135,18 +1140,17 @@ intelligence.get('/', (c) => {
 
       {/* RESULTS CARD */}
       <div class="card bg-base-100 shadow-md border border-base-300">
-        <div class="card-body">
-          <h2 class="card-title mb-2">Results</h2>
-          <div id="resultsArea" class="alert alert-info alert-soft">
+        <div class="card-body overflow-x-auto">
+          <div id="resultsArea" class="alert alert-info alert-soft min-w-max">
             <span>Enter an indicator and select a source to see results here</span>
           </div>
         </div>
       </div>
 
       {/* MODE INFO CARDS */}
-      <div class="grid gap-4 grid-cols-1 md:grid-cols-3">
+      <div class="grid gap-2 md:gap-4 grid-cols-1 md:grid-cols-3">
         <div id="modeCard-single" class="card bg-base-100 shadow-md border border-base-300">
-          <div class="card-body">
+          <div class="card-body overflow-hidden">
             <h2 class="card-title text-lg">
               <span class="text-3xl">1️⃣</span>
               Single Mode
@@ -1163,7 +1167,7 @@ intelligence.get('/', (c) => {
           </div>
         </div>
         <div id="modeCard-bulk" class="card bg-base-100 shadow-md border border-base-300">
-          <div class="card-body">
+          <div class="card-body overflow-hidden">
             <h2 class="card-title text-lg">
               <span class="text-3xl">📋</span>
               Bulk Mode
@@ -1180,7 +1184,7 @@ intelligence.get('/', (c) => {
           </div>
         </div>
         <div id="modeCard-combined" class="card bg-base-100 shadow-md border border-base-300">
-          <div class="card-body">
+          <div class="card-body overflow-hidden">
             <h2 class="card-title text-lg">
               <span class="text-3xl">🔗</span>
               Combined Analysis
@@ -1194,6 +1198,16 @@ intelligence.get('/', (c) => {
               <li>Max 10 indicators per run</li>
             </ul>
             <p id="modeCardHint-combined" class="text-xs mt-2 text-base-content/40">Select manually above</p>
+          </div>
+        </div>
+      </div>
+
+      {/* SESSION MALICIOUS LOG */}
+      <div class="card bg-base-100 shadow-md border border-base-300">
+        <div class="card-body gap-2">
+          <h2 class="card-title text-base">🚨 Malicious Indicators This Session</h2>
+          <div id="malicious-list" class="text-xs text-base-content/40 italic">
+            No malicious indicators found this session
           </div>
         </div>
       </div>
@@ -1302,6 +1316,30 @@ intelligence.get('/', (c) => {
           var newMal = parseInt(sessionStorage.getItem('intel_malicious') || '0') + (rd.maliciousCount || 0);
           sessionStorage.setItem('intel_malicious', String(newMal));
           var em = document.getElementById('stat-malicious'); if (em) em.textContent = String(newMal);
+          var malList = [];
+          try { malList = JSON.parse(sessionStorage.getItem('intel_malicious_list') || '[]'); } catch(e2) {}
+          if (rd.results) {
+            rd.results.forEach(function(r) {
+              if (r.result && r.result.status === 'malicious') {
+                if (!malList.some(function(m) { return m.indicator === r.indicator; })) {
+                  malList.push({ indicator: r.indicator, source: rd.source || 'Unknown', time: new Date().toLocaleTimeString() });
+                }
+              }
+            });
+          }
+          if (rd.combinedResults) {
+            rd.combinedResults.forEach(function(r) {
+              var isMal = (r.abdb && (r.abdb.abuseConfidenceScore || 0) > 75) ||
+                          (r.vt && r.vt.last_analysis_stats && (r.vt.last_analysis_stats.malicious || 0) > 0) ||
+                          (r.otx && r.otx.status === 'malicious') ||
+                          (r.tfox && r.tfox.status === 'malicious');
+              if (isMal && !malList.some(function(m) { return m.indicator === r.indicator; })) {
+                malList.push({ indicator: r.indicator, source: 'Combined', time: new Date().toLocaleTimeString() });
+              }
+            });
+          }
+          sessionStorage.setItem('intel_malicious_list', JSON.stringify(malList));
+          updateMaliciousList();
         } catch(e) {}
       }
 
@@ -1371,10 +1409,10 @@ intelligence.get('/', (c) => {
       });
     }
 
-    // Copy Formatted IP: (IP (Hostname, CC), ...
-    var copyPtmBtn = resultsArea.querySelector('#copyPtmBtn');
-    if (copyPtmBtn) {
-      copyPtmBtn.addEventListener('click', function () {
+    // Copy Formatted IP: IP (ISP: hostname, cc), ...
+    var copyFormtdBtn = resultsArea.querySelector('#copyFormtdBtn');
+    if (copyFormtdBtn) {
+      copyFormtdBtn.addEventListener('click', function () {
         var el = resultsArea.querySelector('#resultsData');
         if (!el) return;
         try {
@@ -1382,29 +1420,54 @@ intelligence.get('/', (c) => {
           var src = data.source;
           var entries = (data.results || []).map(function (r) {
             if (!r.result) return null;
-            var ip = '', hostname = '', cc = '';
+            var ip = '', cc = '';
             if (src === 'AbuseIPDB') {
               ip = r.result.ipAddress || r.indicator;
-              hostname = (r.result.hostnames && r.result.hostnames[0]) || r.result.domain || '-';
+              var isp = r.result.isp || '-';
               cc = r.result.countryCode || '-';
+              return ip + ' (ISP: ' + isp + ', ' + cc + ')';
             } else if (src === 'VirusTotal') {
               ip = r.result.id || r.indicator;
-              hostname = r.result.rdap_name || '-';
+              var hostname = r.result.rdap_name || '-';
               cc = r.result.country || '-';
+              return ip + ' (ISP: ' + hostname + ', ' + cc + ')';
             } else {
-              ip = r.indicator; hostname = '-'; cc = '-';
+              ip = r.indicator; cc = '-';
+              return ip + ' (ISP: -, ' + cc + ')';
             }
-            return ip + ' (' + hostname + ',' + cc + ')';
           }).filter(Boolean);
           navigator.clipboard.writeText(entries.join(', ')).then(function () {
-            copyPtmBtn.textContent = '\\u2713 Copied!';
-            setTimeout(function () { copyPtmBtn.textContent = '\\uD83D\\uDD17 Copy Formatted IP'; }, 2000);
+            copyFormtdBtn.textContent = '\\u2713 Copied!';
+            setTimeout(function () { copyFormtdBtn.textContent = '\\uD83D\\uDD17 Copy Formatted IP'; }, 2000);
           });
         } catch (e) { console.error('Copy Formatted IP failed', e); }
       });
     }
   }
-  // ── Load session stats on init ───────────────────────────────────────────────
+  // ── Session stats init ───────────────────────────────────────────────────────
+  function escHtml(s) {
+    return (s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  }
+
+  function updateMaliciousList() {
+    var listEl = document.getElementById('malicious-list');
+    if (!listEl) return;
+    var malList = [];
+    try { malList = JSON.parse(sessionStorage.getItem('intel_malicious_list') || '[]'); } catch(e) {}
+    if (malList.length === 0) {
+      listEl.innerHTML = '<p class="text-xs text-base-content/40 italic">No malicious indicators found this session</p>';
+      return;
+    }
+    listEl.innerHTML = malList.map(function(m) {
+      return '<div class="flex items-center gap-2 py-1 border-b border-base-300/50 last:border-0">' +
+        '<span class="badge badge-error badge-xs">\uD83D\uDD34</span>' +
+        '<span class="font-mono text-xs flex-1">' + escHtml(m.indicator) + '</span>' +
+        '<span class="badge badge-ghost badge-xs">' + escHtml(m.source) + '</span>' +
+        '<span class="text-xs text-base-content/40">' + escHtml(m.time) + '</span>' +
+        '</div>';
+    }).join('');
+  }
+
   (function loadSessionStats() {
     var checks = sessionStorage.getItem('intel_checks');
     var ec = document.getElementById('stat-checks'); if (ec && checks) ec.textContent = checks;
@@ -1416,6 +1479,7 @@ intelligence.get('/', (c) => {
     }
     var mal = sessionStorage.getItem('intel_malicious');
     var em = document.getElementById('stat-malicious'); if (em && mal) em.textContent = mal;
+    updateMaliciousList();
   })();
 
 })();
