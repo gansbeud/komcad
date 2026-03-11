@@ -1,0 +1,40 @@
+@import "tailwindcss";
+@import "flag-icons/css/flag-icons.min.css";
+
+@plugin "daisyui" {
+  /* Register all available themes */
+  themes: light --default, dark , cupcake, bumblebee, emerald, corporate, synthwave --prefersdark, retro, cyberpunk, valentine, halloween, garden, forest, aqua, lofi, pastel, fantasy, wireframe, black, luxury, dracula, cmyk, autumn, business, acid, lemonade, night, coffee, winter, dim, nord, sunset, caramellatte, abyss, silk, deepcloud;
+}
+
+/* Define your custom theme properly for Tailwind v4 */
+@plugin "daisyui/theme" {
+  name: "deepcloud";
+  color-scheme: "dark";
+  
+  /* Brand Colors */
+  --color-primary: oklch(70% 0.14 182.503);
+  --color-primary-content: oklch(98% 0.014 180.72);
+  --color-secondary: oklch(71% 0.143 215.221);
+  --color-secondary-content: oklch(98% 0.019 200.873);
+  --color-accent: oklch(66% 0.295 322.15);
+  --color-accent-content: oklch(97% 0.017 320.058);
+
+  /* UI Base Colors */
+  --color-base-100: oklch(14% 0.005 285.823);
+  --color-base-200: oklch(21% 0.006 285.885);
+  --color-base-300: oklch(27% 0.006 286.033);
+  --color-base-content: oklch(96% 0.001 286.375);
+
+  /* Status Colors */
+  --color-info: oklch(71% 0.143 215.221);
+  --color-success: oklch(70% 0.14 182.503);
+  --color-warning: oklch(70% 0.213 47.604);
+  --color-error: oklch(64% 0.246 16.439);
+
+  /* Component Variables - Fine-tuned for a 'Premium' feel */
+  --radius-selector: 1rem;      /* Reduced from 2rem for a sharper look */
+  --radius-field: 0.5rem;
+  --radius-box: 0.75rem;       /* Standard 'Apple-style' curves */
+  --border: 1px;               /* 0.5px can look blurry on some screens */
+  --depth: 1;
+}

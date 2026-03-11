@@ -9,11 +9,18 @@
     "cf-typegen": "wrangler types --env-interface CloudflareBindings"
   },
   "dependencies": {
-    "hono": "^4.12.5"
+    "@tailwindcss/vite": "^4.2.1",
+    "@types/nodemailer": "^7.0.11",
+    "flag-icons": "^7.5.0",
+    "hono": "^4.12.5",
+    "nodemailer": "^8.0.2"
   },
   "devDependencies": {
     "@hono/vite-build": "^1.2.0",
     "@hono/vite-dev-server": "^0.18.2",
+    "daisyui": "^5.5.19",
+    "dotenv": "^17.3.1",
+    "tailwindcss": "^4.2.1",
     "vite": "^6.3.5",
     "wrangler": "^4.4.0"
   }
