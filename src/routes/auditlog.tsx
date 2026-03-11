@@ -44,6 +44,7 @@ function verdictBadge(summary: string | null) {
     if (s.abdb?.status) statuses.push(s.abdb.status)
     if (s.vt?.status)   statuses.push(s.vt.status)
     if (s.otx?.status)  statuses.push(s.otx.status)
+    if (s.tfox?.status) statuses.push(s.tfox.status)
     if (statuses.length === 0) return <span class="text-xs opacity-40">—</span>
     const worst = statuses.includes('malicious') ? 'malicious'
                 : statuses.includes('suspicious') ? 'suspicious'
@@ -68,10 +69,11 @@ function summaryText(summary: string | null): string {
     if (s.country   !== undefined && s.org !== undefined) parts.push(`${s.country} / ${s.org}`)
     else if (s.country !== undefined) parts.push(`country: ${s.country}`)
     else if (s.org     !== undefined) parts.push(`org: ${s.org}`)
-    if (s.abdb || s.vt || s.otx) {
+    if (s.abdb || s.vt || s.otx || s.tfox) {
       if (s.abdb) parts.push(`ABDB: ${s.abdb.status ?? ''}(${s.abdb.score ?? ''})`)
       if (s.vt)   parts.push(`VT: ${s.vt.status ?? ''}(mal:${s.vt.malicious ?? ''})`)
       if (s.otx)  parts.push(`OTX: ${s.otx.status ?? ''}(${s.otx.pulses ?? ''} pulses)`)
+      if (s.tfox) parts.push(`TFX: ${s.tfox.status ?? ''}(${s.tfox.malware ?? '—'})`)
     }
     return parts.length > 0 ? parts.join(' | ') : JSON.stringify(s)
   } catch {

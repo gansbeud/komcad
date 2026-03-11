@@ -12,6 +12,13 @@ import { getCookie, deleteCookie } from 'hono/cookie'
 
 const app = new Hono()
 
+// ── Report form rate limiter (in-memory, best-effort) ──────────────────────
+// Note: resets per Worker isolate restart. For persistent limits use CF Rate Limiting.
+const reportAttempts = new Map<string, { count: number; resetAt: number }>()
+const REPORT_MAX = 3
+const REPORT_WINDOW_MS = 60 * 60 * 1000 // 1 hour
+
+
 // ── AUTH — login/logout public routes (no JWT guard) ────────────────────────
 app.route('/', authRoutes)
 
@@ -365,6 +372,19 @@ app.route('/admin', auditlogRoutes)
 
 // ── Report / Contact form submission ─────────────────────────────────────────
 app.post('/api/report', async (c) => {
+  // Rate limit: max REPORT_MAX submissions per IP per hour
+  const clientIp = c.req.header('CF-Connecting-IP') ?? c.req.header('X-Forwarded-For')?.split(',')[0]?.trim() ?? 'unknown'
+  const now = Date.now()
+  const current = reportAttempts.get(clientIp)
+  if (current && now < current.resetAt) {
+    if (current.count >= REPORT_MAX) {
+      return c.json({ success: false, message: 'Too many submissions. Please try again later.' }, 429)
+    }
+    current.count++
+  } else {
+    reportAttempts.set(clientIp, { count: 1, resetAt: now + REPORT_WINDOW_MS })
+  }
+
   try {
     const form    = await c.req.formData()
     const name    = (form.get('name')    as string ?? '').trim()

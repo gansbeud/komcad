@@ -13,6 +13,12 @@ type AuthEnv = {
 
 const auth = new Hono<{ Bindings: AuthEnv }>()
 
+// ── Login brute-force protection (in-memory, best-effort) ─────────────────
+// Note: resets per Worker isolate restart. For persistent limits use CF Rate Limiting.
+const loginAttempts = new Map<string, { count: number; resetAt: number }>()
+const LOGIN_MAX = 10
+const LOGIN_WINDOW_MS = 15 * 60 * 1000 // 15 min
+
 // ── GET /login ─────────────────────────────────────────────────────────────
 auth.get('/login', (c) => {
   const hasError = c.req.query('error') === '1'
@@ -21,6 +27,19 @@ auth.get('/login', (c) => {
 
 // ── POST /login ────────────────────────────────────────────────────────────
 auth.post('/login', async (c) => {
+  const clientIp = c.req.header('CF-Connecting-IP') ?? c.req.header('X-Forwarded-For')?.split(',')[0]?.trim() ?? 'unknown'
+  const now = Date.now()
+  const current = loginAttempts.get(clientIp)
+  if (current && now < current.resetAt) {
+    if (current.count >= LOGIN_MAX) {
+      await logAuthEvent('login_failure', 'unknown', c.req.raw, { reason: `rate_limit:${clientIp}` })
+      return c.redirect('/login?error=1')
+    }
+    current.count++
+  } else {
+    loginAttempts.set(clientIp, { count: 1, resetAt: now + LOGIN_WINDOW_MS })
+  }
+
   const body     = await c.req.parseBody()
   const username = String(body.username ?? '').trim()
   const password = String(body.password ?? '')
@@ -57,6 +76,7 @@ auth.post('/login', async (c) => {
   })
 
   await logAuthEvent('login_success', username, c.req.raw, { sessionExpiresAt })
+  loginAttempts.delete(clientIp)
   return c.redirect('/')
 })
 

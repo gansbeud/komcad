@@ -2,6 +2,7 @@ import { Hono } from 'hono'
 import { checkAbuseIPDB, formatAbuseIPDBResult } from '../lib/abuseipdb'
 import { checkVirusTotal, formatVirusTotalResult } from '../lib/virustotal'
 import { checkOTX, formatOTXResult } from '../lib/otx'
+import { checkThreatFox, formatThreatFoxResult } from '../lib/threatfox'
 import { logCheckEvents } from '../lib/checklog'
 
 const intelligence = new Hono()
@@ -10,10 +11,32 @@ const intelligence = new Hono()
 intelligence.post('/api/check', async (c) => {
   try {
     const formData = await c.req.formData()
-    const indicators = String(formData.get('indicators'))
+    const rawInput = String(formData.get('indicators') ?? '')
+
+    // Input length guard (prevents oversized payloads)
+    if (rawInput.length > 50000) {
+      return c.html(
+        <div class="alert alert-error alert-soft">
+          <span>Input too large (max 50,000 characters). Please reduce your input.</span>
+        </div>
+      )
+    }
+
+    const indicators = rawInput
       .split('\n')
       .map((i) => i.trim())
       .filter((i) => i.length > 0)
+
+    // Individual indicator length guard
+    const overlongIdx = indicators.findIndex((ind) => ind.length > 500)
+    if (overlongIdx !== -1) {
+      return c.html(
+        <div class="alert alert-error alert-soft">
+          <span>Indicator #{overlongIdx + 1} exceeds the 500-character limit. Please shorten it.</span>
+        </div>
+      )
+    }
+
     const mode = String(formData.get('mode') || 'Single Mode')
     const maxAgeInDays = Math.max(1, Math.min(365, parseInt(String(formData.get('maxAgeInDays') || '180'), 10) || 180))
     const isCombined = mode === 'Combined Analysis'
@@ -35,23 +58,14 @@ intelligence.post('/api/check', async (c) => {
       )
     }
 
-    // Combined Analysis: cap at 10 indicators
-    if (isCombined && indicators.length > 10) {
-      return c.html(
-        <div class="alert alert-warning alert-soft">
-          <span>Combined Analysis is limited to 10 indicators. You submitted {indicators.length}. Please reduce your input.</span>
-        </div>
-      )
-    }
-
     // For combined mode, read checkbox sources[]; otherwise single radio source
-    const availableSources = ['AbuseIPDB', 'VirusTotal', 'OTX Alienvault']
+    const availableSources = ['AbuseIPDB', 'VirusTotal', 'OTX Alienvault', 'ThreatFOX']
     let source = ''
     let combinedSources: string[] = []
 
     if (isCombined) {
       combinedSources = formData.getAll('sources').map(String).filter((s: string) => availableSources.includes(s))
-      if (combinedSources.length === 0) combinedSources = ['AbuseIPDB', 'VirusTotal', 'OTX Alienvault']
+      if (combinedSources.length === 0) combinedSources = ['AbuseIPDB', 'VirusTotal', 'OTX Alienvault', 'ThreatFOX']
       source = combinedSources.join(', ')
     } else {
       source = String(formData.get('source') || 'AbuseIPDB')
@@ -59,6 +73,28 @@ intelligence.post('/api/check', async (c) => {
         return c.html(
           <div class="alert alert-error alert-soft">
             <span>Source {source} is not available yet</span>
+          </div>
+        )
+      }
+    }
+
+    // Demo account rate limits (configurable via env)
+    const _reqUsername = (c as any).get?.('username') as string ?? 'unknown'
+    const demoUser = process.env.DEMO_USER ?? 'demo'
+    if (_reqUsername === demoUser) {
+      const bulkMax = parseInt(process.env.DEMO_RATE_BULK_MAX ?? '5', 10)
+      const combinedMax = parseInt(process.env.DEMO_RATE_COMBINED_MAX ?? '2', 10)
+      if (!isCombined && indicators.length > bulkMax) {
+        return c.html(
+          <div class="alert alert-warning alert-soft">
+            <span>Demo accounts are limited to <strong>{bulkMax} indicators</strong> per Bulk Mode request. You submitted {indicators.length}. Please reduce your input or contact an admin.</span>
+          </div>
+        )
+      }
+      if (isCombined && indicators.length > combinedMax) {
+        return c.html(
+          <div class="alert alert-warning alert-soft">
+            <span>Demo accounts are limited to <strong>{combinedMax} indicators</strong> per Combined Analysis. You submitted {indicators.length}. Please reduce your input or contact an admin.</span>
           </div>
         )
       }
@@ -124,12 +160,13 @@ intelligence.post('/api/check', async (c) => {
         abdb: any
         vt: any
         otx: any
+        tfox: any
         errors: Record<string, string>
       }
 
       const combinedResults: CombinedRow[] = await Promise.all(
         indicators.map(async (indicator) => {
-          const row: CombinedRow = { indicator, abdb: null, vt: null, otx: null, errors: {} }
+          const row: CombinedRow = { indicator, abdb: null, vt: null, otx: null, tfox: null, errors: {} }
           await Promise.all([
             combinedSources.includes('AbuseIPDB')
               ? checkAbuseIPDB(indicator, maxAgeInDays)
@@ -146,6 +183,11 @@ intelligence.post('/api/check', async (c) => {
                   .then((r) => { row.otx = formatOTXResult(r, indicator) })
                   .catch((e) => { row.errors['OTX Alienvault'] = e instanceof Error ? e.message : 'Error' })
               : Promise.resolve(),
+            combinedSources.includes('ThreatFOX')
+              ? checkThreatFox(indicator)
+                  .then((r) => { row.tfox = formatThreatFoxResult(r, indicator) })
+                  .catch((e) => { row.errors['ThreatFOX'] = e instanceof Error ? e.message : 'Error' })
+              : Promise.resolve(),
           ])
           return row
         })
@@ -155,7 +197,8 @@ intelligence.post('/api/check', async (c) => {
         const abdbMal = r.abdb && (r.abdb.abuseConfidenceScore ?? 0) > 75
         const vtMal = r.vt && (r.vt.last_analysis_stats?.malicious ?? 0) > 0
         const otxMal = r.otx && r.otx.status === 'malicious'
-        return abdbMal || vtMal || otxMal
+        const tfoxMal = r.tfox && r.tfox.status === 'malicious'
+        return abdbMal || vtMal || otxMal || tfoxMal
       }).length
 
       // Log each indicator result
@@ -167,6 +210,7 @@ intelligence.post('/api/check', async (c) => {
           if (r.abdb) summaryObj.abdb = { status: r.abdb.status, score: r.abdb.abuseConfidenceScore, reports: r.abdb.totalReports, whitelisted: r.abdb.isWhitelisted }
           if (r.vt)   summaryObj.vt   = { status: r.vt.status, malicious: r.vt.last_analysis_stats?.malicious, suspicious: r.vt.last_analysis_stats?.suspicious }
           if (r.otx)  summaryObj.otx  = { status: r.otx.status, pulses: r.otx.pulse_count, whitelisted: r.otx.whitelisted }
+          if (r.tfox) summaryObj.tfox = { status: r.tfox.status, malware: r.tfox.top_malware, confidence: r.tfox.confidence_level }
           if (Object.keys(r.errors).length > 0) summaryObj.errors = r.errors
           return {
             indicator: r.indicator,
@@ -180,155 +224,285 @@ intelligence.post('/api/check', async (c) => {
       )
 
       const renderCombinedCorrelation = () => {
-        const valid = combinedResults.filter((r) => r.abdb || r.vt || r.otx)
+        const valid = combinedResults.filter((r) => r.abdb || r.vt || r.otx || r.tfox)
         if (valid.length === 0) return null
 
-        const malC = valid.filter((r) => {
-          return (r.abdb && (r.abdb.abuseConfidenceScore ?? 0) > 75) ||
-                 (r.vt && (r.vt.last_analysis_stats?.malicious ?? 0) > 0) ||
-                 (r.otx && r.otx.status === 'malicious')
+        const malC = valid.filter((r) =>
+          (r.abdb && (r.abdb.abuseConfidenceScore ?? 0) > 75) ||
+          (r.vt && (r.vt.last_analysis_stats?.malicious ?? 0) > 0) ||
+          (r.otx && r.otx.status === 'malicious') ||
+          (r.tfox && r.tfox.status === 'malicious')
+        ).length
+
+        const susC = valid.filter((r) => {
+          const isMal = (r.abdb && (r.abdb.abuseConfidenceScore ?? 0) > 75) ||
+            (r.vt && (r.vt.last_analysis_stats?.malicious ?? 0) > 0) ||
+            (r.otx && r.otx.status === 'malicious') ||
+            (r.tfox && r.tfox.status === 'malicious')
+          if (isMal) return false
+          return (r.abdb && (r.abdb.abuseConfidenceScore ?? 0) > 25) ||
+            (r.vt && (r.vt.last_analysis_stats?.suspicious ?? 0) > 0) ||
+            (r.otx && r.otx.status === 'suspicious') ||
+            (r.tfox && r.tfox.status === 'suspicious')
         }).length
-        const countries = [...new Set(valid.flatMap((r) => [
-          r.abdb?.countryCode, r.vt?.country,
-        ].filter(Boolean)))] as string[]
+
+        const cleanC = valid.length - malC - susC
+        const countries = [...new Set(valid.flatMap((r) => [r.abdb?.countryCode, r.vt?.country].filter(Boolean)))] as string[]
         const isps = [...new Set(valid.map((r) => r.abdb?.isp).filter(Boolean))] as string[]
         const domains = [...new Set(valid.map((r) => r.abdb?.domain || r.vt?.rdap_name).filter(Boolean))] as string[]
         const allPulses = valid.flatMap((r) => (r.otx?.pulses ?? []).map((p: any) => p.name)).filter(Boolean)
         const uniquePulses = [...new Set(allPulses)] as string[]
+        const malware = [...new Set(valid.map((r) => r.tfox?.top_malware).filter(Boolean))] as string[]
         const threatScore = valid.length > 0 ? Math.round((malC / valid.length) * 100) : 0
-        const scoreColor = threatScore > 60 ? 'badge-error' : threatScore > 20 ? 'badge-warning' : 'badge-success'
+        const scoreBadge = threatScore > 60 ? 'badge-error' : threatScore > 20 ? 'badge-warning' : 'badge-success'
+
         return (
-          <div class="rounded-lg border border-base-300 bg-base-200/50 p-4 space-y-3">
-            <div class="flex items-center gap-2 flex-wrap">
-              <p class="font-bold text-sm text-base-content/90">🔗 Correlation Analysis</p>
-              <span class={`badge badge-sm font-bold ${scoreColor}`}>Threat Score {threatScore}%</span>
-              <span class="text-xs text-base-content/50">{valid.length} of {combinedResults.length} resolved</span>
+          <div class="rounded-xl border border-base-300 bg-base-100 shadow-sm overflow-hidden">
+            {/* Header bar */}
+            <div class="flex items-center justify-between px-4 py-3 bg-base-200/70 border-b border-base-300 flex-wrap gap-2">
+              <div class="flex items-center gap-2 flex-wrap">
+                <span class="font-bold text-sm">🔗 Correlation Analysis</span>
+                <span class="text-xs text-base-content/50">{valid.length} of {combinedResults.length} indicators resolved</span>
+              </div>
+              <div class="flex flex-wrap gap-2 items-center">
+                <span class={`badge badge-sm font-bold ${scoreBadge}`}>Threat Score: {threatScore}%</span>
+                {combinedSources.map((s) => <span key={s} class="badge badge-outline badge-xs">{s}</span>)}
+              </div>
             </div>
-            <div class="flex flex-wrap gap-2 items-center text-xs">
-              <span class="text-base-content/60">Sources queried:</span>
-              {combinedSources.map((s) => <span key={s} class="badge badge-outline badge-xs">{s}</span>)}
+
+            <div class="p-4 space-y-4">
+              {/* Verdict summary */}
+              <div class="flex flex-wrap gap-2 items-center">
+                <span class="text-xs font-semibold text-base-content/50 uppercase tracking-wider">Verdicts</span>
+                {malC > 0 && <span class="badge badge-error font-bold">🔴 {malC} Malicious</span>}
+                {susC > 0 && <span class="badge badge-warning font-bold">🟡 {susC} Suspicious</span>}
+                {cleanC > 0 && <span class="badge badge-success">🟢 {cleanC} Clean</span>}
+              </div>
+
+              {/* Per-indicator summary cards */}
+              <div>
+                <p class="text-xs font-semibold text-base-content/50 uppercase tracking-wider mb-2">Per-Indicator Summary</p>
+                <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-2">
+                  {combinedResults.map((r, idx) => {
+                    const isMal = (r.abdb && (r.abdb.abuseConfidenceScore ?? 0) > 75) ||
+                                  (r.vt && (r.vt.last_analysis_stats?.malicious ?? 0) > 0) ||
+                                  (r.otx && r.otx.status === 'malicious') ||
+                                  (r.tfox && r.tfox.status === 'malicious')
+                    const isSus = !isMal && (
+                      (r.abdb && (r.abdb.abuseConfidenceScore ?? 0) > 25) ||
+                      (r.vt && (r.vt.last_analysis_stats?.suspicious ?? 0) > 0) ||
+                      (r.otx && r.otx.status === 'suspicious') ||
+                      (r.tfox && r.tfox.status === 'suspicious')
+                    )
+                    const cardBorder = isMal ? 'border-error/50 bg-error/5' : isSus ? 'border-warning/40 bg-warning/5' : 'border-success/30 bg-success/5'
+                    const verdictIcon = isMal ? '🔴' : isSus ? '🟡' : '🟢'
+                    const hasError = Object.keys(r.errors).length > 0 && !r.abdb && !r.vt && !r.otx && !r.tfox
+                    return (
+                      <div key={idx} class={`rounded-lg border p-2 space-y-1 ${hasError ? 'border-base-300 bg-base-200/30' : cardBorder}`}>
+                        <div class="flex items-center justify-between gap-1">
+                          <span class="font-mono text-xs truncate flex-1" title={r.indicator}>{r.indicator}</span>
+                          <span title={isMal ? 'Malicious' : isSus ? 'Suspicious' : hasError ? 'Error' : 'Clean'}>{hasError ? '⚠' : verdictIcon}</span>
+                        </div>
+                        {hasError ? (
+                          <p class="text-xs text-error/70 truncate">Error fetching data</p>
+                        ) : (
+                          <div class="flex flex-wrap gap-1">
+                            {combinedSources.includes('AbuseIPDB') && r.abdb && (
+                              <span class={`badge badge-xs font-mono ${(r.abdb.abuseConfidenceScore ?? 0) > 75 ? 'badge-error' : (r.abdb.abuseConfidenceScore ?? 0) > 25 ? 'badge-warning' : 'badge-outline'}`}>
+                                AB:{r.abdb.abuseConfidenceScore}%
+                              </span>
+                            )}
+                            {combinedSources.includes('VirusTotal') && r.vt && (
+                              <span class={`badge badge-xs font-mono ${(r.vt.last_analysis_stats?.malicious ?? 0) > 0 ? 'badge-error' : (r.vt.last_analysis_stats?.suspicious ?? 0) > 0 ? 'badge-warning' : 'badge-outline'}`}>
+                                VT:{r.vt.last_analysis_stats?.malicious ?? 0}M/{r.vt.last_analysis_stats?.suspicious ?? 0}S
+                              </span>
+                            )}
+                            {combinedSources.includes('OTX Alienvault') && r.otx && (
+                              <span class={`badge badge-xs font-mono ${r.otx.status === 'malicious' ? 'badge-error' : r.otx.status === 'suspicious' ? 'badge-warning' : 'badge-outline'}`}>
+                                OTX:{r.otx.pulse_count}p
+                              </span>
+                            )}
+                            {combinedSources.includes('ThreatFOX') && r.tfox && r.tfox.found && (
+                              <span class={`badge badge-xs font-mono ${r.tfox.status === 'malicious' ? 'badge-error' : r.tfox.status === 'suspicious' ? 'badge-warning' : 'badge-outline'}`}>
+                                TFX:{r.tfox.confidence_level}%
+                              </span>
+                            )}
+                            {combinedSources.includes('ThreatFOX') && r.tfox && !r.tfox.found && (
+                              <span class="badge badge-xs badge-outline font-mono">TFX:—</span>
+                            )}
+                          </div>
+                        )}
+                        {r.tfox?.top_malware && (
+                          <p class="text-xs text-error/80 truncate font-mono" title={r.tfox.top_malware}>☠ {r.tfox.top_malware}</p>
+                        )}
+                      </div>
+                    )
+                  })}
+                </div>
+              </div>
+
+              {/* Infrastructure correlation */}
+              {(countries.length > 0 || isps.length > 0 || domains.length > 0 || uniquePulses.length > 0 || malware.length > 0) && (
+                <div>
+                  <p class="text-xs font-semibold text-base-content/50 uppercase tracking-wider mb-2">Infrastructure Correlation</p>
+                  <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                    {countries.length > 0 && (
+                      <div class="rounded-lg bg-base-200/60 px-3 py-2">
+                        <p class="text-xs font-semibold text-base-content/50 mb-1">🌍 Countries</p>
+                        <p class="text-xs font-mono">{countries.join(', ')}</p>
+                      </div>
+                    )}
+                    {isps.length > 0 && (
+                      <div class="rounded-lg bg-base-200/60 px-3 py-2">
+                        <p class="text-xs font-semibold text-base-content/50 mb-1">🏢 ISPs</p>
+                        <p class="text-xs font-mono">{isps.join(' · ')}</p>
+                      </div>
+                    )}
+                    {domains.length > 0 && (
+                      <div class="rounded-lg bg-base-200/60 px-3 py-2">
+                        <p class="text-xs font-semibold text-base-content/50 mb-1">🌐 Domains / RDAP</p>
+                        <p class="text-xs font-mono">{domains.join(' · ')}</p>
+                      </div>
+                    )}
+                    {uniquePulses.length > 0 && (
+                      <div class="rounded-lg bg-base-200/60 px-3 py-2">
+                        <p class="text-xs font-semibold text-base-content/50 mb-1">📡 OTX Pulses</p>
+                        <p class="text-xs font-mono">{uniquePulses.slice(0, 5).join(' · ')}{uniquePulses.length > 5 ? ` +${uniquePulses.length - 5} more` : ''}</p>
+                      </div>
+                    )}
+                    {malware.length > 0 && (
+                      <div class="rounded-lg bg-error/10 border border-error/20 px-3 py-2 sm:col-span-2">
+                        <p class="text-xs font-semibold text-error/70 mb-1">☠ ThreatFOX Malware Families</p>
+                        <p class="text-xs font-mono text-error">{malware.join(' · ')}</p>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
             </div>
-            <div class="flex flex-wrap gap-2 items-center text-xs">
-              <span class="text-base-content/60">Malicious indicators:</span>
-              {malC > 0 && <span class="badge badge-error badge-sm font-bold">{malC}</span>}
-              {malC === 0 && <span class="badge badge-success badge-sm font-bold">0</span>}
-            </div>
-            {countries.length > 0 && (
-              <p class="text-xs">
-                <span class="text-base-content/60 font-semibold">Countries: </span>
-                <span class="font-mono">{countries.join(', ')}</span>
-              </p>
-            )}
-            {isps.length > 0 && (
-              <p class="text-xs">
-                <span class="text-base-content/60 font-semibold">ISPs: </span>
-                <span class="font-mono">{isps.join(' · ')}</span>
-              </p>
-            )}
-            {domains.length > 0 && (
-              <p class="text-xs">
-                <span class="text-base-content/60 font-semibold">Domains: </span>
-                <span class="font-mono">{domains.join(' · ')}</span>
-              </p>
-            )}
-            {uniquePulses.length > 0 && (
-              <p class="text-xs">
-                <span class="text-base-content/60 font-semibold">Shared OTX Pulses: </span>
-                <span class="font-mono">{uniquePulses.slice(0, 5).join(' · ')}{uniquePulses.length > 5 ? ` +${uniquePulses.length - 5} more` : ''}</span>
-              </p>
-            )}
           </div>
         )
       }
 
-      const renderCombinedTable = () => (
-        <table class="table table-xs table-zebra w-full" id="resultsTable">
-          <thead>
-            <tr class="border-base-300">
-              <th rowSpan={2} class="align-middle">Indicator</th>
-              {combinedSources.includes('AbuseIPDB') && <th colSpan={4} class="text-center border-l border-base-300">AbuseIPDB</th>}
-              {combinedSources.includes('VirusTotal') && <th colSpan={3} class="text-center border-l border-base-300">VirusTotal</th>}
-              {combinedSources.includes('OTX Alienvault') && <th colSpan={4} class="text-center border-l border-base-300">OTX Alienvault</th>}
-            </tr>
-            <tr class="border-base-300 text-xs">
-              {combinedSources.includes('AbuseIPDB') && <>
-                <th class="border-l border-base-300">Whitelisted</th><th>Tor</th><th>Abuse Score</th><th>Reports</th>
-              </>}
-              {combinedSources.includes('VirusTotal') && <>
-                <th class="border-l border-base-300">Malicious</th><th>Suspicious</th><th>Harmless</th>
-              </>}
-              {combinedSources.includes('OTX Alienvault') && <>
-                <th class="border-l border-base-300">Status</th><th>Whitelisted</th><th>Reputation</th><th>Pulses</th>
-              </>}
-            </tr>
-          </thead>
-          <tbody>
-            {combinedResults.map((r, idx) => {
-              if (Object.keys(r.errors).length > 0 && !r.abdb && !r.vt && !r.otx) {
-                const errMsg = Object.entries(r.errors).map(([k, v]) => `${k}: ${v}`).join('; ')
+      const renderCombinedTable = () => {
+        // Pre-compute colSpan for full-row error cells
+        const totalDataCols =
+          (combinedSources.includes('AbuseIPDB') ? 4 : 0) +
+          (combinedSources.includes('VirusTotal') ? 3 : 0) +
+          (combinedSources.includes('OTX Alienvault') ? 4 : 0) +
+          (combinedSources.includes('ThreatFOX') ? 3 : 0)
+        return (
+          <table class="table table-xs table-zebra w-full" id="resultsTable">
+            <thead>
+              <tr class="border-base-300">
+                <th rowSpan={2} class="align-middle">Indicator</th>
+                {combinedSources.includes('AbuseIPDB') && <th colSpan={4} class="text-center border-l border-base-300">AbuseIPDB</th>}
+                {combinedSources.includes('VirusTotal') && <th colSpan={3} class="text-center border-l border-base-300">VirusTotal</th>}
+                {combinedSources.includes('OTX Alienvault') && <th colSpan={4} class="text-center border-l border-base-300">OTX Alienvault</th>}
+                {combinedSources.includes('ThreatFOX') && <th colSpan={3} class="text-center border-l border-base-300">ThreatFOX</th>}
+              </tr>
+              <tr class="border-base-300 text-xs">
+                {combinedSources.includes('AbuseIPDB') && <>
+                  <th class="border-l border-base-300">Whitelisted</th><th>Tor</th><th>Abuse Score</th><th>Reports</th>
+                </>}
+                {combinedSources.includes('VirusTotal') && <>
+                  <th class="border-l border-base-300">Malicious</th><th>Suspicious</th><th>Harmless</th>
+                </>}
+                {combinedSources.includes('OTX Alienvault') && <>
+                  <th class="border-l border-base-300">Status</th><th>Whitelisted</th><th>Reputation</th><th>Pulses</th>
+                </>}
+                {combinedSources.includes('ThreatFOX') && <>
+                  <th class="border-l border-base-300">Malware</th><th>Confidence</th><th>Threat Type</th>
+                </>}
+              </tr>
+            </thead>
+            <tbody>
+              {combinedResults.map((r, idx) => {
+                if (Object.keys(r.errors).length > 0 && !r.abdb && !r.vt && !r.otx && !r.tfox) {
+                  const errMsg = Object.entries(r.errors).map(([k, v]) => `${k}: ${v}`).join('; ')
+                  return (
+                    <tr key={idx} class="hover:bg-base-200/50">
+                      <td class="font-mono text-xs">{r.indicator}</td>
+                      <td colSpan={totalDataCols} class="text-error text-xs">{errMsg}</td>
+                    </tr>
+                  )
+                }
+                const abdbScore = r.abdb?.abuseConfidenceScore ?? 0
+                const abdbBadge = abdbScore > 75 ? 'badge-error' : abdbScore > 25 ? 'badge-warning' : 'badge-success'
+                const vtSt = r.vt?.last_analysis_stats ?? {}
+                const otxStatus = r.otx?.status ?? '-'
+                const otxStatusColor = otxStatus === 'malicious' ? 'badge-error' : otxStatus === 'suspicious' ? 'badge-warning' : 'badge-success'
+                const otxRepColor = (r.otx?.reputation ?? 0) < 0 ? 'text-error' : (r.otx?.reputation ?? 0) > 0 ? 'text-success' : 'text-base-content/60'
+                const tfoxConf = r.tfox?.confidence_level ?? 0
+                const tfoxConfBadge = tfoxConf >= 75 ? 'badge-error' : tfoxConf >= 30 ? 'badge-warning' : 'badge-outline'
                 return (
                   <tr key={idx} class="hover:bg-base-200/50">
-                    <td class="font-mono text-xs">{r.indicator}</td>
-                    <td colSpan={combinedSources.length > 2 ? 11 : combinedSources.length > 1 ? 7 : 4} class="text-error text-xs">{errMsg}</td>
+                    <td class="font-mono text-xs whitespace-nowrap">{r.indicator}</td>
+                    {combinedSources.includes('AbuseIPDB') && (
+                      r.errors['AbuseIPDB'] ? (
+                        <><td colSpan={4} class="text-error text-xs border-l border-base-300">{r.errors['AbuseIPDB']}</td></>
+                      ) : r.abdb ? (
+                        <>
+                          <td class="text-xs border-l border-base-300">{bvWL(r.abdb.isWhitelisted)}</td>
+                          <td class="text-xs">{bv(r.abdb.isTor)}</td>
+                          <td><span class={`badge badge-sm font-bold ${abdbBadge}`}>{abdbScore}%</span></td>
+                          <td class="text-xs">{v(r.abdb.totalReports)}</td>
+                        </>
+                      ) : (
+                        <><td colSpan={4} class="text-xs text-base-content/40 italic border-l border-base-300">—</td></>
+                      )
+                    )}
+                    {combinedSources.includes('VirusTotal') && (
+                      r.errors['VirusTotal'] ? (
+                        <><td colSpan={3} class="text-error text-xs border-l border-base-300">{r.errors['VirusTotal']}</td></>
+                      ) : r.vt ? (
+                        <>
+                          <td class="border-l border-base-300"><span class={`badge badge-sm font-bold ${(vtSt.malicious ?? 0) > 0 ? 'badge-error' : 'badge-outline'}`}>{vtSt.malicious ?? 0}</span></td>
+                          <td><span class={`badge badge-sm font-bold ${(vtSt.suspicious ?? 0) > 0 ? 'badge-warning' : 'badge-outline'}`}>{vtSt.suspicious ?? 0}</span></td>
+                          <td><span class={`badge badge-sm font-bold ${(vtSt.harmless ?? 0) > 0 ? 'badge-success' : 'badge-outline'}`}>{vtSt.harmless ?? 0}</span></td>
+                        </>
+                      ) : (
+                        <><td colSpan={3} class="text-xs text-base-content/40 italic border-l border-base-300">—</td></>
+                      )
+                    )}
+                    {combinedSources.includes('OTX Alienvault') && (
+                      r.errors['OTX Alienvault'] ? (
+                        <><td colSpan={4} class="text-error text-xs border-l border-base-300">{r.errors['OTX Alienvault']}</td></>
+                      ) : r.otx ? (
+                        <>
+                          <td class="border-l border-base-300"><span class={`badge badge-sm font-bold ${otxStatusColor}`}>{otxStatus}</span></td>
+                          <td class="text-xs">{bvWL(r.otx.whitelisted)}</td>
+                          <td class={`text-xs font-semibold ${otxRepColor}`}>{v(r.otx.reputation)}</td>
+                          <td class="text-xs">{v(r.otx.pulse_count)}</td>
+                        </>
+                      ) : (
+                        <><td colSpan={4} class="text-xs text-base-content/40 italic border-l border-base-300">—</td></>
+                      )
+                    )}
+                    {combinedSources.includes('ThreatFOX') && (
+                      r.errors['ThreatFOX'] ? (
+                        <><td colSpan={3} class="text-error text-xs border-l border-base-300">{r.errors['ThreatFOX']}</td></>
+                      ) : r.tfox ? (
+                        r.tfox.found ? (
+                          <>
+                            <td class="text-xs border-l border-base-300 max-w-32 truncate" title={r.tfox.top_malware ?? '-'}>{r.tfox.top_malware ?? '-'}</td>
+                            <td><span class={`badge badge-sm font-bold ${tfoxConfBadge}`}>{tfoxConf}%</span></td>
+                            <td class="text-xs">{r.tfox.top_threat_type ?? '-'}</td>
+                          </>
+                        ) : (
+                          <><td colSpan={3} class="text-xs text-base-content/40 italic border-l border-base-300">Not found</td></>
+                        )
+                      ) : (
+                        <><td colSpan={3} class="text-xs text-base-content/40 italic border-l border-base-300">—</td></>
+                      )
+                    )}
                   </tr>
                 )
-              }
-              const abdbScore = r.abdb?.abuseConfidenceScore ?? 0
-              const abdbBadge = abdbScore > 75 ? 'badge-error' : abdbScore > 25 ? 'badge-warning' : 'badge-success'
-              const vtSt = r.vt?.last_analysis_stats ?? {}
-              const otxStatus = r.otx?.status ?? '-'
-              const otxStatusColor = otxStatus === 'malicious' ? 'badge-error' : otxStatus === 'suspicious' ? 'badge-warning' : 'badge-success'
-              const otxRepColor = (r.otx?.reputation ?? 0) < 0 ? 'text-error' : (r.otx?.reputation ?? 0) > 0 ? 'text-success' : 'text-base-content/60'
-              return (
-                <tr key={idx} class="hover:bg-base-200/50">
-                  <td class="font-mono text-xs whitespace-nowrap">{r.indicator}</td>
-                  {combinedSources.includes('AbuseIPDB') && (
-                    r.errors['AbuseIPDB'] ? (
-                      <><td colSpan={4} class="text-error text-xs border-l border-base-300">{r.errors['AbuseIPDB']}</td></>
-                    ) : r.abdb ? (
-                      <>
-                        <td class="text-xs border-l border-base-300">{bvWL(r.abdb.isWhitelisted)}</td>
-                        <td class="text-xs">{bv(r.abdb.isTor)}</td>
-                        <td><span class={`badge badge-sm font-bold ${abdbBadge}`}>{abdbScore}%</span></td>
-                        <td class="text-xs">{v(r.abdb.totalReports)}</td>
-                      </>
-                    ) : (
-                      <><td colSpan={4} class="text-xs text-base-content/40 italic border-l border-base-300">—</td></>
-                    )
-                  )}
-                  {combinedSources.includes('VirusTotal') && (
-                    r.errors['VirusTotal'] ? (
-                      <><td colSpan={3} class="text-error text-xs border-l border-base-300">{r.errors['VirusTotal']}</td></>
-                    ) : r.vt ? (
-                      <>
-                        <td class="border-l border-base-300"><span class={`badge badge-sm font-bold ${(vtSt.malicious ?? 0) > 0 ? 'badge-error' : 'badge-outline'}`}>{vtSt.malicious ?? 0}</span></td>
-                        <td><span class={`badge badge-sm font-bold ${(vtSt.suspicious ?? 0) > 0 ? 'badge-warning' : 'badge-outline'}`}>{vtSt.suspicious ?? 0}</span></td>
-                        <td><span class={`badge badge-sm font-bold ${(vtSt.harmless ?? 0) > 0 ? 'badge-success' : 'badge-outline'}`}>{vtSt.harmless ?? 0}</span></td>
-                      </>
-                    ) : (
-                      <><td colSpan={3} class="text-xs text-base-content/40 italic border-l border-base-300">—</td></>
-                    )
-                  )}
-                  {combinedSources.includes('OTX Alienvault') && (
-                    r.errors['OTX Alienvault'] ? (
-                      <><td colSpan={4} class="text-error text-xs border-l border-base-300">{r.errors['OTX Alienvault']}</td></>
-                    ) : r.otx ? (
-                      <>
-                        <td class="border-l border-base-300"><span class={`badge badge-sm font-bold ${otxStatusColor}`}>{otxStatus}</span></td>
-                        <td class="text-xs">{bvWL(r.otx.whitelisted)}</td>
-                        <td class={`text-xs font-semibold ${otxRepColor}`}>{v(r.otx.reputation)}</td>
-                        <td class="text-xs">{v(r.otx.pulse_count)}</td>
-                      </>
-                    ) : (
-                      <><td colSpan={4} class="text-xs text-base-content/40 italic border-l border-base-300">—</td></>
-                    )
-                  )}
-                </tr>
-              )
-            })}
-          </tbody>
-        </table>
-      )
+              })}
+            </tbody>
+          </table>
+        )
+      }
 
       return c.html(
         <div class="space-y-4">
@@ -338,13 +512,20 @@ intelligence.post('/api/check', async (c) => {
             <span class="font-semibold">{combinedResults.length}</span>
           </p>
 
-          <div class="overflow-x-auto rounded-lg border border-base-300">
-            <div class="min-w-max">
-              {renderCombinedTable()}
-            </div>
-          </div>
-
           {renderCombinedCorrelation()}
+
+          <details class="group border border-base-300 rounded-lg overflow-hidden">
+            <summary class="flex items-center gap-2 cursor-pointer select-none bg-base-200/50 px-3 py-2 text-sm font-semibold text-base-content/80 hover:bg-base-200 transition-colors list-none">
+              <span class="inline-block transition-transform duration-200 group-open:rotate-90 text-xs">▶</span>
+              Detailed Results Table
+              <span class="badge badge-ghost badge-xs ml-auto">click to expand</span>
+            </summary>
+            <div class="overflow-x-auto">
+              <div class="min-w-max">
+                {renderCombinedTable()}
+              </div>
+            </div>
+          </details>
 
           <div class="border border-base-300 rounded-lg p-3 bg-base-200/50 text-xs space-y-1 text-base-content/70">
             <p class="font-semibold text-base-content/90 mb-1">Audit Information</p>
@@ -386,6 +567,9 @@ intelligence.post('/api/check', async (c) => {
             break
           case 'OTX Alienvault':
             result = formatOTXResult(await checkOTX(trimmed), trimmed)
+            break
+          case 'ThreatFOX':
+            result = formatThreatFoxResult(await checkThreatFox(trimmed), trimmed)
             break
         }
         results.push({ indicator: trimmed, source, result })
@@ -581,6 +765,62 @@ intelligence.post('/api/check', async (c) => {
       </table>
     )
 
+    const renderThreatFoxTable = () => (
+      <table class="table table-xs table-zebra w-full" id="resultsTable">
+        <thead>
+          <tr class="border-base-300">
+            <th>Indicator</th>
+            <th>Status</th>
+            <th>Malware</th>
+            <th>Confidence</th>
+            <th>Threat Type</th>
+            <th>First Seen</th>
+            <th>Last Seen</th>
+          </tr>
+        </thead>
+        <tbody>
+          {results.map((r, idx) => {
+            if (r.error) {
+              return (
+                <tr key={idx} class="hover:bg-base-200/50">
+                  <td class="font-mono text-xs">{r.indicator}</td>
+                  <td colSpan={6} class="text-error text-xs">{r.error}</td>
+                </tr>
+              )
+            }
+            if (!r.result) {
+              return (
+                <tr key={idx} class="hover:bg-base-200/50">
+                  <td class="font-mono text-xs">{r.indicator}</td>
+                  <td colSpan={6} class="text-base-content/50 text-xs italic">Not found / unsupported indicator type</td>
+                </tr>
+              )
+            }
+            const d = r.result
+            const statusColor = d.status === 'malicious' ? 'badge-error' : d.status === 'suspicious' ? 'badge-warning' : 'badge-success'
+            const confBadge = (d.confidence_level ?? 0) >= 75 ? 'badge-error' : (d.confidence_level ?? 0) >= 30 ? 'badge-warning' : 'badge-outline'
+            return (
+              <tr key={idx} class="hover:bg-base-200/50">
+                <td class="font-mono text-xs">{v(d.indicator)}</td>
+                <td><span class={`badge badge-sm font-bold ${statusColor}`}>{v(d.status)}</span></td>
+                <td class="text-xs max-w-40 truncate" title={d.found ? v(d.top_malware) : '-'}>
+                  {d.found ? v(d.top_malware) : <span class="opacity-40 italic">Not found in ThreatFOX</span>}
+                </td>
+                <td>
+                  {d.found
+                    ? <span class={`badge badge-sm font-bold ${confBadge}`}>{d.confidence_level ?? 0}%</span>
+                    : <span class="text-xs opacity-40">—</span>}
+                </td>
+                <td class="text-xs">{d.found ? v(d.top_threat_type) : '-'}</td>
+                <td class="text-xs whitespace-nowrap">{d.found ? toJakartaTime(d.first_seen) : '-'}</td>
+                <td class="text-xs whitespace-nowrap">{d.found ? toJakartaTime(d.last_seen) : '-'}</td>
+              </tr>
+            )
+          })}
+        </tbody>
+      </table>
+    )
+
     // Compute malicious count for session stats
     const maliciousCount = results.filter(r => r.result?.status === 'malicious').length
 
@@ -595,6 +835,7 @@ intelligence.post('/api/check', async (c) => {
           if (source === 'AbuseIPDB') summaryObj = { status: s.status, score: s.abuseConfidenceScore, reports: s.totalReports, whitelisted: s.isWhitelisted }
           else if (source === 'VirusTotal') summaryObj = { status: s.status, malicious: s.last_analysis_stats?.malicious, suspicious: s.last_analysis_stats?.suspicious }
           else if (source === 'OTX Alienvault') summaryObj = { status: s.status, pulses: s.pulse_count, whitelisted: s.whitelisted }
+          else if (source === 'ThreatFOX') summaryObj = { status: s.status, malware: s.top_malware, confidence: s.confidence_level }
         }
         return { indicator: r.indicator, result: 'success' as const, summary: summaryObj ? JSON.stringify(summaryObj) : null }
       }),
@@ -672,7 +913,9 @@ intelligence.post('/api/check', async (c) => {
             ? renderAbuseIPDBTable()
             : source === 'VirusTotal'
               ? renderVirusTotalTable()
-              : renderOTXTable()}
+              : source === 'ThreatFOX'
+                ? renderThreatFoxTable()
+                : renderOTXTable()}
           </div>
         </div>
 
@@ -711,7 +954,7 @@ intelligence.post('/api/check', async (c) => {
           id="resultsData"
           type="application/json"
           dangerouslySetInnerHTML={{
-            __html: JSON.stringify({ mode, source, maxAgeInDays, results, maliciousCount }).replace(/<\/script/gi, '<\/script'),
+            __html: JSON.stringify({ mode, source, maxAgeInDays, results, maliciousCount }).replace(/<\/script/gi, '<\\/script'),
           }}
         />
       </div>
@@ -743,8 +986,8 @@ intelligence.get('/', (c) => {
         <div class="stat bg-base-100 shadow-md border border-base-300 rounded-lg">
           <div class="stat-figure text-3xl">📊</div>
           <div class="stat-title text-sm opacity-70">Sources</div>
-          <div class="stat-value text-2xl text-primary">3 of 7</div>
-          <div class="stat-desc text-xs opacity-50">AbuseIPDB, VT, OTX</div>
+          <div class="stat-value text-2xl text-primary">4 of 7</div>
+          <div class="stat-desc text-xs opacity-50">AbuseIPDB, VT, OTX, ThreatFOX</div>
         </div>
         <div class="stat bg-base-100 shadow-md border border-base-300 rounded-lg">
           <div class="stat-figure text-3xl">✓</div>
@@ -806,7 +1049,7 @@ intelligence.get('/', (c) => {
                   { value: 'IBM X-Force', disabled: true },
                   { value: 'OTX Alienvault', disabled: false },
                   { value: 'MXtoolbox', disabled: true },
-                  { value: 'Cisco Talos', disabled: true },
+                  { value: 'ThreatFOX', disabled: false },
                 ].map((s) => (
                   <label
                     key={s.value}
@@ -840,6 +1083,7 @@ intelligence.get('/', (c) => {
                   { value: 'AbuseIPDB', defaultChecked: true },
                   { value: 'VirusTotal', defaultChecked: true },
                   { value: 'OTX Alienvault', defaultChecked: true },
+                  { value: 'ThreatFOX', defaultChecked: true },
                 ].map((s) => (
                   <label key={s.value} class="flex items-center gap-2 p-2 rounded cursor-pointer hover:bg-base-200 transition-colors">
                     <input
@@ -946,7 +1190,7 @@ intelligence.get('/', (c) => {
             <ul class="text-xs space-y-1 list-disc list-inside opacity-70">
               <li>Threat score across indicators</li>
               <li>Shared country / ISP / domain</li>
-              <li>OTX pulse overlap detection</li>
+              <li>OTX pulse overlap + ThreatFOX malware</li>
               <li>Max 10 indicators per run</li>
             </ul>
             <p id="modeCardHint-combined" class="text-xs mt-2 text-base-content/40">Select manually above</p>
@@ -1022,14 +1266,20 @@ intelligence.get('/', (c) => {
   // ── Form submit ──────────────────────────────────────────────────────────────
   async function handleFormSubmit(event) {
     event.preventDefault();
+    var form = event.target;
+    var submitBtn = form.querySelector('[type="submit"]');
     var resultsArea = document.getElementById('resultsArea');
+    // Prevent double-submit
+    if (submitBtn && submitBtn.disabled) return;
+    if (submitBtn) { submitBtn.disabled = true; submitBtn.textContent = 'Checking…'; }
     resultsArea.innerHTML = '<div class="flex justify-center py-6"><span class="loading loading-spinner loading-lg"></span></div>';
     var t0 = Date.now();
     try {
-      var response = await fetch('/intelligence/api/check', { method: 'POST', body: new FormData(event.target) });
+      var response = await fetch('/intelligence/api/check', { method: 'POST', body: new FormData(form) });
       var html = await response.text();
       var elapsed = (Date.now() - t0) / 1000;
       resultsArea.innerHTML = html;
+      if (submitBtn) { submitBtn.disabled = false; submitBtn.textContent = 'Check Indicator'; }
 
       // checks count
       var checks = parseInt(sessionStorage.getItem('intel_checks') || '0') + 1;
@@ -1057,6 +1307,7 @@ intelligence.get('/', (c) => {
 
       attachResultHandlers();
     } catch (err) {
+      if (submitBtn) { submitBtn.disabled = false; submitBtn.textContent = 'Check Indicator'; }
       resultsArea.innerHTML = '<div class="alert alert-error alert-soft"><span>Error: ' + err.message + '</span></div>';
     }
   }
