@@ -259,8 +259,8 @@ export const renderer = jsxRenderer(({ children, title }: any, c: any) => {
                 </ul>
               </div>
 
-              {/* Sidebar footer — only report button */}
-              <div class="border-t border-base-300 px-2 py-1.5 shrink-0">
+              {/* Sidebar footer — only report button , hidden for now because need to migrate from nodemailer to resend*/}
+              <div class="hidden border-t border-base-300 px-2 py-1.5 shrink-0">
                 <button
                   class="btn btn-primary btn-xs w-full"
                   onclick="document.getElementById('report_modal').showModal()"

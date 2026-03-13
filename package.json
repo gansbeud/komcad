@@ -13,7 +13,8 @@
     "@types/nodemailer": "^7.0.11",
     "flag-icons": "^7.5.0",
     "hono": "^4.12.5",
-    "nodemailer": "^8.0.2"
+    "nodemailer": "^8.0.2",
+    "resend": "^6.9.3"
   },
   "devDependencies": {
     "@hono/vite-build": "^1.2.0",
