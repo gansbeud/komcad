@@ -100,7 +100,7 @@ function loginPage(hasError: boolean): string {
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>KOMCAD — Login</title>
-  <link rel="stylesheet" href="/src/style.css" />
+  <link rel="stylesheet" href="/static/style.css" />
 </head>
 <body class="bg-base-200 min-h-screen flex items-center justify-center p-4">
   <div class="w-full max-w-sm space-y-6">
