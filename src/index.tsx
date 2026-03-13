@@ -19,7 +19,7 @@ app.route('/', authRoutes)
 app.use('*', async (c, next) => {
   const path = c.req.path
   const isStaticAsset = path.startsWith('/assets/') || /\.(css|js|mjs|ico|png|jpg|jpeg|gif|svg|woff2?|ttf|eot|map)$/i.test(path)
-  if (path === '/login' || path.startsWith('/login/') || path === '/logout' || isStaticAsset) return next()
+  if (path === '/login' || path.startsWith('/login/') || path === '/logout' || path.startsWith('/static/') || isStaticAsset) return next()
   const token = getCookie(c, 'komcad_token')
   if (!token) return c.redirect('/login')
   try {
