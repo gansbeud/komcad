@@ -5,30 +5,29 @@
   "pages_build_output_dir": "./dist",
   "compatibility_flags": [
     "nodejs_compat"
-  ]
-  // "vars": {
-  //   "MY_VAR": "my-variable"
-  // },
-  // "kv_namespaces": [
-  //   {
-  //     "binding": "MY_KV_NAMESPACE",
-  //     "id": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
-  //   }
-  // ],
-  // "r2_buckets": [
-  //   {
-  //     "binding": "MY_BUCKET",
-  //     "bucket_name": "my-bucket"
-  //   }
-  // ],
-  // "d1_databases": [
-  //   {
-  //     "binding": "MY_DB",
-  //     "database_name": "my-database",
-  //     "database_id": ""
-  //   }
-  // ],
-  // "ai": {
-  //   "binding": "AI"
-  // }
+  ],
+  "vars": {
+    "DEMO_RATE_BULK_MAX": "5",
+    "DEMO_RATE_COMBINED_MAX": "2"
+  }
+  // For sensitive secrets, use: wrangler secret put VARIABLE_NAME
+  // This will prompt you to enter the value securely and store it in Cloudflare
+  // 
+  // Required secrets to configure:
+  // - wrangler secret put ABUSEIPDB_API_KEY
+  // - wrangler secret put VIRUSTOTAL_API_KEY
+  // - wrangler secret put OTX_API_KEY
+  // - wrangler secret put THREATFOX_API_KEY
+  // - wrangler secret put IPINFO_API_KEY
+  // - wrangler secret put JWT_SECRET
+  // - wrangler secret put ADMIN_USER
+  // - wrangler secret put ADMIN_PASS
+  // - wrangler secret put DEMO_USER
+  // - wrangler secret put DEMO_PASS
+  // - wrangler secret put SMTP_HOST
+  // - wrangler secret put SMTP_PORT
+  // - wrangler secret put SMTP_USER
+  // - wrangler secret put SMTP_PASS
+  // - wrangler secret put SMTP_FROM
+  // - wrangler secret put REPORT_TO
 }

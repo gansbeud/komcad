@@ -15,16 +15,17 @@ export async function sendReportEmail(
   email: string,
   message: string,
 ): Promise<void> {
-  const host = env.SMTP_HOST
-  const user = env.SMTP_USER
-  const pass = env.SMTP_PASS
-  const to   = env.REPORT_TO
+  // Check env (Cloudflare) first, then process.env (local development)
+  const host = env.SMTP_HOST ?? process.env.SMTP_HOST
+  const user = env.SMTP_USER ?? process.env.SMTP_USER
+  const pass = env.SMTP_PASS ?? process.env.SMTP_PASS
+  const to   = env.REPORT_TO ?? process.env.REPORT_TO
 
   if (!host || !user || !pass || !to) {
     throw new Error('SMTP configuration is incomplete. Required: SMTP_HOST, SMTP_USER, SMTP_PASS, REPORT_TO')
   }
 
-  const port   = parseInt(env.SMTP_PORT ?? '587', 10)
+  const port   = parseInt((env.SMTP_PORT ?? process.env.SMTP_PORT) ?? '587', 10)
   const secure = port === 465
 
   const transporter = nodemailer.createTransport({
@@ -34,7 +35,7 @@ export async function sendReportEmail(
     auth: { user, pass },
   })
 
-  const from = env.SMTP_FROM ?? user
+  const from = env.SMTP_FROM ?? process.env.SMTP_FROM ?? user
 
   const html = `
 <!DOCTYPE html>

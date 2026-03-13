@@ -4,7 +4,21 @@ import { checkVirusTotal, formatVirusTotalResult } from '../lib/virustotal'
 import { checkOTX, formatOTXResult } from '../lib/otx'
 import { sendReportEmail } from '../lib/mailer'
 
-const api = new Hono()
+type ApiEnv = {
+  ABUSEIPDB_API_KEY: string
+  VIRUSTOTAL_API_KEY: string
+  OTX_API_KEY: string
+  THREATFOX_API_KEY: string
+  IPINFO_API_KEY: string
+  SMTP_HOST: string
+  SMTP_PORT: string
+  SMTP_USER: string
+  SMTP_PASS: string
+  SMTP_FROM: string
+  REPORT_TO: string
+}
+
+const api = new Hono<{ Bindings: ApiEnv }>()
 
 interface CheckRequest {
   indicators: string[]
@@ -23,6 +37,7 @@ api.post('/check', async (c) => {
   try {
     const body = (await c.req.json()) as CheckRequest
     const { indicators, source, mode } = body
+    const env = c.env as ApiEnv
 
     if (!indicators || indicators.length === 0) {
       return c.json({ error: 'No indicators provided' }, 400)
@@ -49,17 +64,17 @@ api.post('/check', async (c) => {
 
         switch (source) {
           case 'AbuseIPDB': {
-            const abuseResult = await checkAbuseIPDB(trimmedIndicator)
+            const abuseResult = await checkAbuseIPDB(trimmedIndicator, env)
             result = formatAbuseIPDBResult(abuseResult)
             break
           }
           case 'VirusTotal': {
-            const vtResult = await checkVirusTotal(trimmedIndicator)
+            const vtResult = await checkVirusTotal(trimmedIndicator, env)
             result = formatVirusTotalResult(vtResult, trimmedIndicator)
             break
           }
           case 'OTX Alienvault': {
-            const otxResult = await checkOTX(trimmedIndicator)
+            const otxResult = await checkOTX(trimmedIndicator, env)
             result = formatOTXResult(otxResult, trimmedIndicator)
             break
           }

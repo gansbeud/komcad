@@ -28,8 +28,9 @@ interface ThreatFoxResponse {
   data: ThreatFoxMatch[] | null
 }
 
-export async function checkThreatFox(indicator: string): Promise<ThreatFoxResponse | null> {
-  const apiKey = process.env.THREATFOX_API_KEY
+export async function checkThreatFox(indicator: string, env?: any): Promise<ThreatFoxResponse | null> {
+  // Check c.env (Cloudflare) first, then process.env (local development)
+  const apiKey = env?.THREATFOX_API_KEY ?? process.env.THREATFOX_API_KEY
 
   try {
     const headers: Record<string, string> = {

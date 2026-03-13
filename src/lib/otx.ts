@@ -16,8 +16,9 @@ interface OTXIndicatorResult {
   reputation: number
 }
 
-export async function checkOTX(indicator: string): Promise<OTXIndicatorResult | null> {
-  const apiKey = process.env.OTX_API_KEY
+export async function checkOTX(indicator: string, env?: any): Promise<OTXIndicatorResult | null> {
+  // Check c.env (Cloudflare) first, then process.env (local development)
+  const apiKey = (env?.OTX_API_KEY) ?? (process.env.OTX_API_KEY) ?? ''
   if (!apiKey) {
     throw new Error('OTX_API_KEY not configured')
   }

@@ -14,8 +14,9 @@ interface AbuseIPDBResult {
   lastReportedAt: string | null
 }
 
-export async function checkAbuseIPDB(indicator: string, maxAgeInDays: number = 180): Promise<AbuseIPDBResult | null> {
-  const apiKey = process.env.ABUSEIPDB_API_KEY
+export async function checkAbuseIPDB(indicator: string, env?: any, maxAgeInDays: number = 180): Promise<AbuseIPDBResult | null> {
+  // Check c.env (Cloudflare) first, then process.env (local development)
+  const apiKey = (env?.ABUSEIPDB_API_KEY) ?? (process.env.ABUSEIPDB_API_KEY) ?? ''
   if (!apiKey) {
     throw new Error('ABUSEIPDB_API_KEY not configured')
   }

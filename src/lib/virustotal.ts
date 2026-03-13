@@ -29,8 +29,9 @@ interface VirusTotalResult {
   }
 }
 
-export async function checkVirusTotal(indicator: string): Promise<VirusTotalResult | null> {
-  const apiKey = process.env.VIRUSTOTAL_API_KEY
+export async function checkVirusTotal(indicator: string, env?: any): Promise<VirusTotalResult | null> {
+  // Check c.env (Cloudflare) first, then process.env (local development)
+  const apiKey = (env?.VIRUSTOTAL_API_KEY) ?? (process.env.VIRUSTOTAL_API_KEY) ?? ''
   if (!apiKey) {
     throw new Error('VIRUSTOTAL_API_KEY not configured')
   }

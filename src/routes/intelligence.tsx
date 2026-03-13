@@ -5,12 +5,22 @@ import { checkOTX, formatOTXResult } from '../lib/otx'
 import { checkThreatFox, formatThreatFoxResult } from '../lib/threatfox'
 import { logCheckEvents } from '../lib/checklog'
 
+type IntelligenceEnv = {
+  ABUSEIPDB_API_KEY: string
+  VIRUSTOTAL_API_KEY: string
+  OTX_API_KEY: string
+  THREATFOX_API_KEY: string
+  DEMO_USER: string
+  DEMO_RATE_BULK_MAX: string
+  DEMO_RATE_COMBINED_MAX: string
+}
+
 function FlagSpan({ cc }: { cc: string }) {
   if (!cc || cc.length < 2) return null
   return <span class={`fi fi-${cc.toLowerCase().slice(0, 2)} me-1`}></span>
 }
 
-const intelligence = new Hono()
+const intelligence = new Hono<{ Bindings: IntelligenceEnv }>()
 
 // POST /api/check — returns an HTML fragment injected into #resultsArea
 intelligence.post('/api/check', async (c) => {
@@ -85,10 +95,11 @@ intelligence.post('/api/check', async (c) => {
 
     // Demo account rate limits (configurable via env)
     const _reqUsername = (c as any).get?.('username') as string ?? 'unknown'
-    const demoUser = process.env.DEMO_USER ?? 'demo'
+    const env = c.env as IntelligenceEnv
+    const demoUser = env.DEMO_USER ?? process.env.DEMO_USER ?? 'demo'
     if (_reqUsername === demoUser) {
-      const bulkMax = parseInt(process.env.DEMO_RATE_BULK_MAX ?? '5', 10)
-      const combinedMax = parseInt(process.env.DEMO_RATE_COMBINED_MAX ?? '2', 10)
+      const bulkMax = parseInt((env.DEMO_RATE_BULK_MAX ?? process.env.DEMO_RATE_BULK_MAX) ?? '5', 10)
+      const combinedMax = parseInt((env.DEMO_RATE_COMBINED_MAX ?? process.env.DEMO_RATE_COMBINED_MAX) ?? '2', 10)
       if (!isCombined && indicators.length > bulkMax) {
         return c.html(
           <div class="alert alert-warning alert-soft">
@@ -172,14 +183,15 @@ intelligence.post('/api/check', async (c) => {
       const combinedResults: CombinedRow[] = await Promise.all(
         indicators.map(async (indicator) => {
           const row: CombinedRow = { indicator, abdb: null, vt: null, otx: null, tfox: null, errors: {} }
+          const env = c.env as IntelligenceEnv
           await Promise.all([
             combinedSources.includes('AbuseIPDB')
-              ? checkAbuseIPDB(indicator, maxAgeInDays)
+              ? checkAbuseIPDB(indicator, env, maxAgeInDays)
                   .then((r) => { row.abdb = formatAbuseIPDBResult(r) })
                   .catch((e) => { row.errors['AbuseIPDB'] = e instanceof Error ? e.message : 'Error' })
               : Promise.resolve(),
             combinedSources.includes('VirusTotal')
-              ? checkVirusTotal(indicator)
+              ? checkVirusTotal(indicator, env)
                   .then((r) => { row.vt = formatVirusTotalResult(r, indicator) })
                   .catch((e) => { row.errors['VirusTotal'] = e instanceof Error ? e.message : 'Error' })
               : Promise.resolve(),
@@ -189,7 +201,7 @@ intelligence.post('/api/check', async (c) => {
                   .catch((e) => { row.errors['OTX Alienvault'] = e instanceof Error ? e.message : 'Error' })
               : Promise.resolve(),
             combinedSources.includes('ThreatFOX')
-              ? checkThreatFox(indicator)
+              ? checkThreatFox(indicator, env)
                   .then((r) => { row.tfox = formatThreatFoxResult(r, indicator) })
                   .catch((e) => { row.errors['ThreatFOX'] = e instanceof Error ? e.message : 'Error' })
               : Promise.resolve(),
@@ -563,18 +575,19 @@ intelligence.post('/api/check', async (c) => {
       if (!trimmed) continue
       try {
         let result: any = null
+        const env = c.env as IntelligenceEnv
         switch (source) {
           case 'AbuseIPDB':
-            result = formatAbuseIPDBResult(await checkAbuseIPDB(trimmed, maxAgeInDays))
+            result = formatAbuseIPDBResult(await checkAbuseIPDB(trimmed, env, maxAgeInDays))
             break
           case 'VirusTotal':
-            result = formatVirusTotalResult(await checkVirusTotal(trimmed), trimmed)
+            result = formatVirusTotalResult(await checkVirusTotal(trimmed, env), trimmed)
             break
           case 'OTX Alienvault':
-            result = formatOTXResult(await checkOTX(trimmed), trimmed)
+            result = formatOTXResult(await checkOTX(trimmed, env), trimmed)
             break
           case 'ThreatFOX':
-            result = formatThreatFoxResult(await checkThreatFox(trimmed), trimmed)
+            result = formatThreatFoxResult(await checkThreatFox(trimmed, env), trimmed)
             break
         }
         results.push({ indicator: trimmed, source, result })
