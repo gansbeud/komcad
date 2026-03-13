@@ -2,6 +2,7 @@ import { Hono } from 'hono'
 import { checkAbuseIPDB, formatAbuseIPDBResult } from '../lib/abuseipdb'
 import { checkVirusTotal, formatVirusTotalResult } from '../lib/virustotal'
 import { checkOTX, formatOTXResult } from '../lib/otx'
+import { sendReportEmail } from '../lib/mailer'
 
 const api = new Hono()
 
@@ -89,6 +90,33 @@ api.post('/check', async (c) => {
     console.error('API Error:', error)
     return c.json(
       { error: error instanceof Error ? error.message : 'Internal server error' },
+      500
+    )
+  }
+})
+
+// ── POST /api/report ──────────────────────────────────────────────────────
+api.post('/report', async (c) => {
+  try {
+    const body = (await c.req.json()) as {
+      name: string
+      email: string
+      message: string
+    }
+
+    const { name, email, message } = body
+
+    if (!name || !email || !message) {
+      return c.json({ error: 'Missing required fields: name, email, message' }, 400)
+    }
+
+    await sendReportEmail(c.env as any, name, email, message)
+
+    return c.json({ success: true, message: 'Report sent successfully' })
+  } catch (error) {
+    console.error('Report API Error:', error)
+    return c.json(
+      { error: error instanceof Error ? error.message : 'Failed to send report' },
       500
     )
   }

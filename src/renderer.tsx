@@ -399,8 +399,12 @@ export const renderer = jsxRenderer(({ children, title }: any, c: any) => {
       btn.textContent = 'Sending…';
       status.className = 'mt-3 hidden';
 
-      var fd = new FormData(form);
-      fetch('/api/report', { method: 'POST', body: fd })
+      var payload = { name: name, email: email, message: message };
+      fetch('/api/report', { 
+        method: 'POST', 
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      })
         .then(function (r) { return r.json(); })
         .then(function (res) {
           if (res.success) {

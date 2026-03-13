@@ -1,6 +1,7 @@
 import { Hono } from 'hono'
 import { getCookie } from 'hono/cookie'
 import { verify } from 'hono/jwt'
+import { serveStatic } from 'hono/serve-static'
 import { renderer } from './renderer'
 import authRoutes from './routes/auth'
 import intelligenceRoutes from './routes/intelligence'
@@ -11,6 +12,9 @@ import dashboardMockRoutes from './routes/dashboard-mock'
 import newsRoutes from './routes/news'
 
 const app = new Hono()
+
+// ── Static files (bypass all middleware) ──────────────────────────────────────
+app.use('/static/*', serveStatic({ root: './dist' }))
 
 // ── Public auth routes (no JWT guard) — must be registered first ────────────
 app.route('/', authRoutes)
