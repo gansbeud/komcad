@@ -6,10 +6,10 @@
   "compatibility_flags": [
     "nodejs_compat"
   ],
-  "vars": {
-    "DEMO_RATE_BULK_MAX": "5",
-    "DEMO_RATE_COMBINED_MAX": "2"
-  }
+  //"vars": {
+  //  "DEMO_RATE_BULK_MAX": "5",
+  //  "DEMO_RATE_COMBINED_MAX": "2"
+  //}
   // For sensitive secrets, use: wrangler secret put VARIABLE_NAME
   // This will prompt you to enter the value securely and store it in Cloudflare
   // 
