@@ -9,6 +9,7 @@ import auditlogRoutes from './routes/auditlog'
 import apiRoutes from './routes/api'
 import dashboardMockRoutes from './routes/dashboard-mock'
 import newsRoutes from './routes/news'
+import './style.css' // Import CSS so Vite resolves it correctly in both dev and prod
 
 const app = new Hono()
 

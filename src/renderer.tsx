@@ -29,7 +29,6 @@ export const renderer = jsxRenderer(({ children, title }: any, c: any) => {
         <meta charset="utf-8" />
         <title>{title ?? 'KOMCAD'}</title>
         <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' fill='white'/><text y='.9em' font-size='90' fill='black'>&#x25C6;</text></svg>" />
-        <link rel="stylesheet" href="/static/style.css" />
         <script src="https://unpkg.com/htmx.org@2.0.4/dist/htmx.min.js" />
       </head>
 
