@@ -28,12 +28,12 @@ news.get('/', (c) => {
         </div>
         <div class="flex items-center gap-2 flex-wrap">
           <span class="text-xs opacity-40 italic" id="news-last-updated">Initialising…</span>
-          <button id="news-refresh-btn" class="btn btn-xs btn-outline gap-1">🔄 Refresh</button>
+          <button id="news-refresh-btn" class="btn btn-xs sm:btn-sm btn-outline gap-1">🔄 Refresh</button>
         </div>
       </div>
 
       {/* ── SOURCE STAT MINI-CARDS ── */}
-      <div class="grid grid-cols-3 sm:grid-cols-5 gap-2" id="source-stats">
+      <div class="grid grid-cols-3 sm:grid-cols-5 gap-2 sm:gap-3" id="source-stats">
         {['🔐','💻','🕵️','🔒','📡'].map((icon) => (
           <div key={icon} class="skeleton h-16 rounded-lg"></div>
         ))}
@@ -61,7 +61,7 @@ news.get('/', (c) => {
       </div>
 
       {/* ── NEWS GRID (skeleton placeholders) ── */}
-      <div id="news-grid" class="grid gap-2 md:gap-4 grid-cols-1 md:grid-cols-2 xl:grid-cols-3">
+      <div id="news-grid" class="grid gap-2 sm:gap-3 md:gap-4 grid-cols-1 md:grid-cols-2 xl:grid-cols-3">
         {[1,2,3,4,5,6].map((i) => (
           <div key={i} class="card bg-base-100 border border-base-300 shadow-sm">
             <div class="card-body gap-2 md:gap-3 p-2 md:p-4">

@@ -112,26 +112,26 @@ auditlog.get('/auditlog', async (c) => {
       </div>
 
       {/* STATS */}
-      <div class="grid gap-4 grid-cols-2 lg:grid-cols-4">
-        <div class="stat bg-base-100 shadow-sm border border-base-300 rounded-lg py-4">
-          <div class="stat-figure text-2xl">🔐</div>
+      <div class="grid gap-2 sm:gap-3 md:gap-4 grid-cols-2 lg:grid-cols-4">
+        <div class="stat bg-base-100 shadow-sm border border-base-300 rounded-lg py-3 sm:py-4">
+          <div class="stat-figure text-xl sm:text-2xl">🔐</div>
           <div class="stat-title text-xs opacity-70">Auth Events</div>
-          <div class="stat-value text-2xl">{totalAuth}</div>
+          <div class="stat-value text-xl sm:text-2xl">{totalAuth}</div>
         </div>
-        <div class="stat bg-base-100 shadow-sm border border-base-300 rounded-lg py-4">
-          <div class="stat-figure text-2xl">⚠️</div>
+        <div class="stat bg-base-100 shadow-sm border border-base-300 rounded-lg py-3 sm:py-4">
+          <div class="stat-figure text-xl sm:text-2xl">⚠️</div>
           <div class="stat-title text-xs opacity-70">Failed Logins</div>
-          <div class="stat-value text-2xl text-error">{totalFail}</div>
+          <div class="stat-value text-xl sm:text-2xl text-error">{totalFail}</div>
         </div>
-        <div class="stat bg-base-100 shadow-sm border border-base-300 rounded-lg py-4">
-          <div class="stat-figure text-2xl">🔍</div>
+        <div class="stat bg-base-100 shadow-sm border border-base-300 rounded-lg py-3 sm:py-4">
+          <div class="stat-figure text-xl sm:text-2xl">🔍</div>
           <div class="stat-title text-xs opacity-70">Check Events</div>
-          <div class="stat-value text-2xl">{totalCheck}</div>
+          <div class="stat-value text-xl sm:text-2xl">{totalCheck}</div>
         </div>
-        <div class="stat bg-base-100 shadow-sm border border-base-300 rounded-lg py-4">
-          <div class="stat-figure text-2xl">🚨</div>
+        <div class="stat bg-base-100 shadow-sm border border-base-300 rounded-lg py-3 sm:py-4">
+          <div class="stat-figure text-xl sm:text-2xl">🚨</div>
           <div class="stat-title text-xs opacity-70">Malicious Hits</div>
-          <div class="stat-value text-2xl text-error">{totalMal}</div>
+          <div class="stat-value text-xl sm:text-2xl text-error">{totalMal}</div>
         </div>
       </div>
 

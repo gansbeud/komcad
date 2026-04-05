@@ -551,7 +551,7 @@ intelligence.post('/api/check', async (c) => {
           </div>
 
           <div class="flex flex-wrap gap-2">
-            <button class="btn btn-sm btn-outline" id="newCheckBtn">↩ New Check</button>
+            <button class="btn btn-sm sm:btn-md btn-outline" id="newCheckBtn">↩ New Check</button>
             <button class="btn btn-sm btn-outline" id="copyTableBtn">📋 Copy to Clipboard</button>
             <button class="btn btn-sm btn-outline" id="exportCsvBtn">⬇ Export to CSV</button>
           </div>
@@ -1000,29 +1000,29 @@ intelligence.get('/', (c) => {
       </div>
 
       {/* STATS ROW */}
-      <div class="grid gap-2 md:gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-4">
+      <div class="grid gap-2 sm:gap-3 md:gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-4">
         <div class="stat bg-base-100 shadow-md border border-base-300 rounded-lg">
-          <div class="stat-figure text-3xl">📊</div>
-          <div class="stat-title text-sm opacity-70">Sources</div>
-          <div class="stat-value text-2xl text-primary">4 of 7</div>
+          <div class="stat-figure text-2xl sm:text-3xl">📊</div>
+          <div class="stat-title text-xs sm:text-sm opacity-70">Sources</div>
+          <div class="stat-value text-xl sm:text-2xl text-primary">4 of 7</div>
           <div class="stat-desc text-xs opacity-50">AbuseIPDB, VT, OTX, ThreatFOX</div>
         </div>
         <div class="stat bg-base-100 shadow-md border border-base-300 rounded-lg">
-          <div class="stat-figure text-3xl">✓</div>
-          <div class="stat-title text-sm opacity-70">Checks Today</div>
-          <div id="stat-checks" class="stat-value text-2xl text-success">0</div>
+          <div class="stat-figure text-2xl sm:text-3xl">✓</div>
+          <div class="stat-title text-xs sm:text-sm opacity-70">Checks Today</div>
+          <div id="stat-checks" class="stat-value text-xl sm:text-2xl text-success">0</div>
           <div class="stat-desc text-xs opacity-50">This session</div>
         </div>
         <div class="stat bg-base-100 shadow-md border border-base-300 rounded-lg">
-          <div class="stat-figure text-3xl">⚡</div>
-          <div class="stat-title text-sm opacity-70">Avg Speed</div>
-          <div id="stat-speed" class="stat-value text-2xl text-info">—</div>
+          <div class="stat-figure text-2xl sm:text-3xl">⚡</div>
+          <div class="stat-title text-xs sm:text-sm opacity-70">Avg Speed</div>
+          <div id="stat-speed" class="stat-value text-xl sm:text-2xl text-info">—</div>
           <div class="stat-desc text-xs opacity-50">Per lookup, this session</div>
         </div>
         <div class="stat bg-base-100 shadow-md border border-base-300 rounded-lg">
-          <div class="stat-figure text-3xl">🛡️</div>
-          <div class="stat-title text-sm opacity-70">Malicious Found</div>
-          <div id="stat-malicious" class="stat-value text-2xl text-warning">0</div>
+          <div class="stat-figure text-2xl sm:text-3xl">🛡️</div>
+          <div class="stat-title text-xs sm:text-sm opacity-70">Malicious Found</div>
+          <div id="stat-malicious" class="stat-value text-xl sm:text-2xl text-warning">0</div>
           <div class="stat-desc text-xs opacity-50">This session</div>
         </div>
       </div>
@@ -1030,7 +1030,7 @@ intelligence.get('/', (c) => {
       {/* CHECKER CARD */}
       <div class="card bg-base-100 shadow-md border border-base-300">
         <div class="card-body gap-3 md:gap-5 overflow-hidden">
-          <h2 class="card-title">🔍 Check Indicators</h2>
+          <h2 class="card-title text-base sm:text-lg">🔍 Check Indicators</h2>
 
           <form id="checkForm">
             {/* MODE SELECTOR */}
@@ -1044,7 +1044,7 @@ intelligence.get('/', (c) => {
                   <button
                     key={m}
                     type="button"
-                    class={`btn btn-sm modeBtn ${m === 'Single Mode' ? 'btn-primary' : 'btn-outline'}`}
+                    class={`btn btn-xs sm:btn-sm modeBtn ${m === 'Single Mode' ? 'btn-primary' : 'btn-outline'}`}
                     data-mode={m}
                   >
                     {m}
@@ -1059,7 +1059,7 @@ intelligence.get('/', (c) => {
               <label class="label pb-1">
                 <span class="label-text font-semibold">Select Source</span>
               </label>
-              <div class="flex flex-wrap gap-3">
+              <div class="flex flex-wrap gap-2 sm:gap-3">
                 {[
                   { value: 'SOC Radar', disabled: true },
                   { value: 'VirusTotal', disabled: false },
@@ -1071,7 +1071,7 @@ intelligence.get('/', (c) => {
                 ].map((s) => (
                   <label
                     key={s.value}
-                    class={`flex items-center gap-2 p-2 rounded cursor-pointer transition-colors ${s.disabled ? 'opacity-40 cursor-not-allowed' : 'hover:bg-base-200'}`}
+                    class={`flex items-center gap-1 sm:gap-2 p-1 sm:p-2 rounded cursor-pointer transition-colors text-xs sm:text-sm ${s.disabled ? 'opacity-40 cursor-not-allowed' : 'hover:bg-base-200'}`}
                   >
                     <input
                       type="radio"
@@ -1081,7 +1081,7 @@ intelligence.get('/', (c) => {
                       checked={s.checked}
                       class="radio radio-primary radio-sm"
                     />
-                    <span class={`text-sm font-medium ${s.disabled ? 'line-through' : ''}`}>
+                    <span class={`font-medium ${s.disabled ? 'line-through' : ''}`}>
                       {s.value}
                     </span>
                   </label>
@@ -1096,14 +1096,14 @@ intelligence.get('/', (c) => {
                 <span class="label-text font-semibold">Sources to Query</span>
                 <span class="text-xs text-base-content/60">All selected sources will be queried in parallel</span>
               </label>
-              <div class="flex flex-wrap gap-3">
+              <div class="flex flex-wrap gap-2 sm:gap-3">
                 {[
                   { value: 'AbuseIPDB', defaultChecked: true },
                   { value: 'VirusTotal', defaultChecked: true },
                   { value: 'OTX Alienvault', defaultChecked: true },
                   { value: 'ThreatFOX', defaultChecked: true },
                 ].map((s) => (
-                  <label key={s.value} class="flex items-center gap-2 p-2 rounded cursor-pointer hover:bg-base-200 transition-colors">
+                  <label key={s.value} class="flex items-center gap-1 sm:gap-2 p-1 sm:p-2 rounded cursor-pointer hover:bg-base-200 transition-colors text-xs sm:text-sm">
                     <input
                       type="checkbox"
                       name="sources"
@@ -1111,7 +1111,7 @@ intelligence.get('/', (c) => {
                       checked={s.defaultChecked}
                       class="checkbox checkbox-primary checkbox-sm"
                     />
-                    <span class="text-sm font-medium">{s.value}</span>
+                    <span class="font-medium">{s.value}</span>
                   </label>
                 ))}
               </div>
@@ -1131,7 +1131,7 @@ intelligence.get('/', (c) => {
                 min="1"
                 max="365"
                 value="180"
-                class="input input-bordered input-sm w-40"
+                class="input input-bordered input-xs sm:input-sm w-full sm:w-40"
               />
               <p class="text-xs text-base-content/60 mt-1">Range: 1–365 days (default 180)</p>
             </div>
@@ -1141,10 +1141,10 @@ intelligence.get('/', (c) => {
               name="indicators"
               id="indicatorsInput"
               placeholder={`Enter indicators (one per line):\n- Single line → Single Mode\n- Multiple lines → Bulk Mode`}
-              class="textarea textarea-bordered h-36 focus:textarea-primary w-full resize-none mb-5"
+              class="textarea textarea-bordered textarea-xs sm:textarea-sm h-24 sm:h-32 focus:textarea-primary w-full resize-none mb-5 text-xs"
             />
 
-            <button type="submit" class="btn btn-primary w-full">
+            <button type="submit" class="btn btn-primary w-full btn-xs sm:btn-sm">
               Check Indicator
             </button>
           </form>

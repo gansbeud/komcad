@@ -80,10 +80,10 @@ whois.post('/api/lookup', async (c) => {
           <span class="text-xs opacity-50">via ipinfo.io Lite API</span>
         </div>
         <div class="flex gap-1 flex-wrap" id="whois-action-btns">
-          <button class="btn btn-xs btn-ghost" id="wh-new-check">🔄 New Check</button>
-          <button class="btn btn-xs btn-outline" id="wh-copy-clip">📋 Copy to Clipboard</button>
-          <button class="btn btn-xs btn-outline" id="wh-export-csv">📥 Export CSV</button>
-          <button class="btn btn-xs btn-primary btn-outline" id="wh-copy-fmt">⊕ Copy Formatted IP</button>
+          <button class="btn btn-xs sm:btn-sm btn-ghost" id="wh-new-check">🔄 New Check</button>
+          <button class="btn btn-xs sm:btn-sm btn-outline" id="wh-copy-clip">📋 Copy to Clipboard</button>
+          <button class="btn btn-xs sm:btn-sm btn-outline" id="wh-export-csv">📥 Export CSV</button>
+          <button class="btn btn-xs sm:btn-sm btn-primary btn-outline" id="wh-copy-fmt">⊕ Copy Formatted IP</button>
         </div>
       </div>
       {/* Hidden data payload for JS */}
@@ -94,7 +94,7 @@ whois.post('/api/lookup', async (c) => {
       {/* Results table */}
       {ok.length > 0 && (
         <div class="overflow-x-auto">
-          <table class="table table-sm table-zebra w-full">
+          <table class="table table-xs sm:table-sm table-zebra w-full">
             <thead>
               <tr>
                 <th>IP</th>
@@ -157,7 +157,7 @@ whois.get('/', (c) => {
       </div>
 
       {/* Stats */}
-      <div class="grid gap-2 md:gap-4 grid-cols-1 sm:grid-cols-3">
+      <div class="grid gap-2 sm:gap-3 md:gap-4 grid-cols-1 sm:grid-cols-3">
         {[
           { icon: '🌐', label: 'Data Source', value: 'ipinfo.io' },
           { icon: '⚡', label: 'API Type', value: 'Lite (Free)' },
@@ -183,7 +183,7 @@ whois.get('/', (c) => {
                 id="whoisInput"
                 rows={6}
                 placeholder={'Enter IP addresses, one per line\n8.8.8.8\n1.1.1.1\n8.8.4.4'}
-                class="textarea textarea-bordered w-full font-mono text-sm focus:textarea-primary resize-y"
+                class="textarea textarea-bordered textarea-sm sm:textarea-md w-full font-mono text-xs sm:text-sm focus:textarea-primary resize-y"
                 required
               />
               <div class="flex items-center justify-between gap-2 flex-wrap">
@@ -194,11 +194,11 @@ whois.get('/', (c) => {
                   <button
                     type="button"
                     id="whoisClearBtn"
-                    class="btn btn-sm btn-ghost"
+                    class="btn btn-sm sm:btn-md btn-ghost"
                   >
                     Clear
                   </button>
-                  <button type="submit" class="btn btn-sm btn-primary">
+                  <button type="submit" class="btn btn-sm sm:btn-md btn-primary">
                     Lookup All
                   </button>
                 </div>

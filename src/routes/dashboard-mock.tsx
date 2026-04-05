@@ -6,8 +6,8 @@ dashboardMock.get('/', (c) => {
   return c.render(
     <div class="relative">
       {/* ── UNDER DEVELOPMENT GLASS OVERLAY ── */}
-      <div class="absolute inset-0 z-20 backdrop-blur-sm bg-base-100/50 flex flex-col items-center justify-center rounded-xl pointer-events-none">
-        <div class="card bg-base-100/80 border border-base-300 shadow-2xl px-8 py-6 text-center max-w-xs pointer-events-auto">
+      <div class="absolute inset-0 z-20 backdrop-blur-sm bg-base-100/50 flex flex-col items-start justify-start pt-20 sm:pt-16 md:pt-32 rounded-xl pointer-events-none">
+        <div class="card bg-base-100/80 border border-base-300 shadow-2xl px-8 py-6 text-center max-w-xs pointer-events-auto mx-auto">
           <div class="text-5xl mb-3">🚧</div>
           <h2 class="text-lg font-bold mb-1">Under Development</h2>
           <p class="text-sm opacity-60">This dashboard is currently being built. Check back soon.</p>
@@ -29,7 +29,7 @@ dashboardMock.get('/', (c) => {
       </div>
 
       {/* TOP STATS WITH ANIMATIONS */}
-      <div class="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 mb-2">
+      <div class="grid gap-2 sm:gap-3 md:gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 mb-2">
         {[
           { icon: '🎯', title: 'Threats Detected', value: '247', desc: '↗ 12% from last week', color: 'error', trend: 'up', goodTrend: false },
           { icon: '✓', title: 'Blocked Attacks', value: '1,284', desc: '↗ 5.2% from last week', color: 'success', trend: 'up', goodTrend: true },
@@ -40,9 +40,9 @@ dashboardMock.get('/', (c) => {
             <div class="card-body p-4">
               <div class="flex justify-between items-start">
                 <div>
-                  <div class="text-4xl mb-2">{stat.icon}</div>
+                  <div class="text-3xl sm:text-4xl mb-2">{stat.icon}</div>
                   <h3 class="text-xs font-bold opacity-70 uppercase">{stat.title}</h3>
-                  <div class={`text-3xl font-bold mt-1 text-${stat.color}`}>{stat.value}</div>
+                  <div class={`text-2xl sm:text-3xl font-bold mt-1 text-${stat.color}`}>{stat.value}</div>
                 </div>
                 <div class={`badge badge-outline text-xs ${ (stat.trend === 'up') === stat.goodTrend ? 'badge-success' : 'badge-error' }`}>
                   {stat.desc}
@@ -64,9 +64,9 @@ dashboardMock.get('/', (c) => {
                 <p class="text-sm opacity-60">Last 24 hours threat detection activity</p>
               </div>
               <div class="tabs tabs-boxed bg-base-200">
-                <button class="tab tab-active tab-sm">24H</button>
-                <button class="tab tab-sm">7D</button>
-                <button class="tab tab-sm">30D</button>
+                <button class="tab tab-active tab-sm sm:tab-md">24H</button>
+                <button class="tab tab-sm sm:tab-md">7D</button>
+                <button class="tab tab-sm sm:tab-md">30D</button>
               </div>
             </div>
 
@@ -162,7 +162,7 @@ dashboardMock.get('/', (c) => {
         {/* QUICK ACTION PANEL */}
         <div class="card bg-base-100 shadow-md border border-base-300">
           <div class="card-body">
-            <h2 class="card-title text-lg mb-4">Quick Actions</h2>
+              <h2 class="card-title text-lg sm:text-xl mb-4">Quick Actions</h2>
             <div class="space-y-2">
               {[
                 { icon: '🔍', label: 'Port Scan', color: 'error' },
@@ -170,8 +170,8 @@ dashboardMock.get('/', (c) => {
                 { icon: '📊', label: 'Whois Lookup', color: 'info' },
                 { icon: '🧹', label: 'Full Audit', color: 'success' }
               ].map((action) => (
-                <button key={action.label} class={`btn btn-${action.color} btn-outline btn-block justify-start`}>
-                  <span class="text-lg">{action.icon}</span>
+                <button key={action.label} class={`btn btn-${action.color} btn-outline btn-block btn-sm sm:btn-md justify-start`}>
+                  <span class="text-base sm:text-lg">{action.icon}</span>
                   {action.label}
                 </button>
               ))}
@@ -181,10 +181,10 @@ dashboardMock.get('/', (c) => {
       </div>
 
       {/* VULNERABILITY & SECURITY STATUS */}
-      <div class="grid gap-6 grid-cols-1 lg:grid-cols-2 mb-6">
+      <div class="grid gap-3 sm:gap-4 md:gap-6 grid-cols-1 lg:grid-cols-2 mb-6">
         <div class="card bg-base-100 shadow-md border border-base-300">
-          <div class="card-body">
-            <h2 class="card-title mb-4">Vulnerability Overview</h2>
+          <div class="card-body p-3 sm:p-4 md:p-6">
+            <h2 class="card-title text-base sm:text-lg mb-4">Vulnerability Overview</h2>
             <div class="space-y-3">
               {[
                 { level: 'Critical', count: 8, color: 'error', width: 'w-full' },
@@ -205,8 +205,8 @@ dashboardMock.get('/', (c) => {
         </div>
 
         <div class="card bg-base-100 shadow-md border border-base-300">
-          <div class="card-body">
-            <h2 class="card-title mb-4">Security Systems</h2>
+          <div class="card-body p-3 sm:p-4 md:p-6">
+            <h2 class="card-title text-base sm:text-lg mb-4">Security Systems</h2>
             <div class="space-y-2">
               {[
                 { name: 'Firewall', status: 'Protected', color: 'success', uptime: '100%' },
