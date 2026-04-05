@@ -6,7 +6,7 @@ dashboardMock.get('/', (c) => {
   return c.render(
     <div class="relative">
       {/* ── UNDER DEVELOPMENT GLASS OVERLAY ── */}
-      <div class="absolute inset-0 z-20 backdrop-blur-sm bg-base-100/50 flex flex-col items-start justify-start pt-20 sm:pt-16 md:pt-32 rounded-xl pointer-events-none">
+      <div class="absolute inset-0 z-20 backdrop-blur-sm bg-base-100/50 flex flex-col items-center justify-start pt-20 sm:pt-16 md:pt-32 rounded-xl pointer-events-none">
         <div class="card bg-base-100/80 border border-base-300 shadow-2xl px-8 py-6 text-center max-w-xs pointer-events-auto mx-auto">
           <div class="text-5xl mb-3">🚧</div>
           <h2 class="text-lg font-bold mb-1">Under Development</h2>

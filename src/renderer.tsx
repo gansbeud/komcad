@@ -374,6 +374,15 @@ export const renderer = jsxRenderer(({ children, title }: any, c: any) => {
     toggle.addEventListener('change', function () {
       drawer.classList.toggle('drawer-open', toggle.checked);
     });
+    // Mobile nav link click: auto-collapse drawer on mobile only
+    document.querySelectorAll('.nav-link').forEach(function (link) {
+      link.addEventListener('click', function () {
+        if (window.innerWidth < 768) {
+          drawer.classList.remove('drawer-open');
+          toggle.checked = false;
+        }
+      });
+    });
   })();
 
   // ── Active nav link sync ──────────────────────────────────────────────────

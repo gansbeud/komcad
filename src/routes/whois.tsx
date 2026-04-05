@@ -93,37 +93,41 @@ whois.post('/api/lookup', async (c) => {
 
       {/* Results table */}
       {ok.length > 0 && (
-        <div class="overflow-x-auto">
-          <table class="table table-xs sm:table-sm table-zebra w-full">
-            <thead>
-              <tr>
-                <th>IP</th>
-                <th>Hostname</th>
-                <th>Org</th>
-                <th>City</th>
-                <th>Region</th>
-                <th>Country</th>
-                <th>Timezone</th>
-              </tr>
-            </thead>
-            <tbody>
-              {ok.map((r) => {
-                const d = r.data!
-                const flag = d.country ? countryFlag(d.country) : ''
-                return (
-                  <tr key={r.ip}>
-                    <td class="font-mono text-xs font-semibold">{d.ip || r.ip}</td>
-                    <td class="font-mono text-xs opacity-70">{d.hostname || '—'}</td>
-                    <td class="text-xs">{d.org || '—'}</td>
-                    <td class="text-xs">{d.city || '—'}</td>
-                    <td class="text-xs">{d.region || '—'}</td>
-                    <td class="text-xs">{flag} {d.country || '—'}</td>
-                    <td class="text-xs">{d.timezone || '—'}</td>
+        <div class="card bg-base-100 shadow-md border border-base-300 overflow-hidden">
+          <div class="overflow-x-auto w-full">
+            <div class="min-w-max">
+              <table class="table table-xs sm:table-sm table-zebra w-full">
+                <thead>
+                  <tr>
+                    <th>IP</th>
+                    <th>Hostname</th>
+                    <th>Org</th>
+                    <th>City</th>
+                    <th>Region</th>
+                    <th>Country</th>
+                    <th>Timezone</th>
                   </tr>
-                )
-              })}
-            </tbody>
-          </table>
+                </thead>
+                <tbody>
+                  {ok.map((r) => {
+                    const d = r.data!
+                    const flag = d.country ? countryFlag(d.country) : ''
+                    return (
+                      <tr key={r.ip}>
+                        <td class="font-mono text-xs font-semibold">{d.ip || r.ip}</td>
+                        <td class="font-mono text-xs opacity-70">{d.hostname || '—'}</td>
+                        <td class="text-xs">{d.org || '—'}</td>
+                        <td class="text-xs">{d.city || '—'}</td>
+                        <td class="text-xs">{d.region || '—'}</td>
+                        <td class="text-xs">{flag} {d.country || '—'}</td>
+                        <td class="text-xs">{d.timezone || '—'}</td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </div>
         </div>
       )}
 
@@ -210,9 +214,9 @@ whois.get('/', (c) => {
 
       {/* Results area */}
       <div class="card bg-base-100 shadow-md border border-base-300">
-        <div class="card-body">
+        <div class="card-body overflow-x-auto">
           <h2 class="card-title mb-2">Results</h2>
-          <div id="whoisResults" class="alert alert-info alert-soft">
+          <div id="whoisResults" class="alert alert-info alert-soft min-w-max">
             <span>Enter IP addresses above and click Lookup All</span>
           </div>
         </div>

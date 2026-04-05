@@ -1144,7 +1144,7 @@ intelligence.get('/', (c) => {
               class="textarea textarea-bordered textarea-xs sm:textarea-sm h-24 sm:h-32 focus:textarea-primary w-full resize-none mb-5 text-xs"
             />
 
-            <button type="submit" class="btn btn-primary w-full btn-xs sm:btn-sm">
+            <button type="submit" class="btn btn-primary w-full btn-sm sm:btn-md">
               Check Indicator
             </button>
           </form>
