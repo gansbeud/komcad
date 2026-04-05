@@ -5,6 +5,10 @@ export const renderer = jsxRenderer(({ children, title }: any, c: any) => {
   const username: string = ((c as any).get?.('username') as string) || 'User'
   const initials = username.slice(0, 2).toUpperCase()
   const isAdmin = username !== 'User' && username === (process.env.ADMIN_USER ?? 'administrator')
+  
+  // CSS path: dev uses source file, prod uses built static asset
+  const stylesheetPath = import.meta.env.DEV ? '/src/style.css' : '/static/style.css'
+  
   // HTMX partial navigation: return only content + OOB breadcrumb swap
   if (c.req.header('HX-Request')) {
     c.header('HX-Title', title ?? 'Dashboard')
@@ -29,6 +33,7 @@ export const renderer = jsxRenderer(({ children, title }: any, c: any) => {
         <meta charset="utf-8" />
         <title>{title ?? 'KOMCAD'}</title>
         <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' fill='white'/><text y='.9em' font-size='90' fill='black'>&#x25C6;</text></svg>" />
+        <link rel="stylesheet" href={stylesheetPath} />
         <script src="https://unpkg.com/htmx.org@2.0.4/dist/htmx.min.js" />
       </head>
 
