@@ -164,3 +164,6 @@ Visit the project repository: [github.com/gansbeud/komcad](https://github.com/ga
 - Single Whois IP/domain lookup
 - Report modal with SMTP support
 - htmx-based SPA navigation with breadcrumbs
+
+
+👍👍
