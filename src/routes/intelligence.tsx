@@ -196,7 +196,7 @@ intelligence.post('/api/check', async (c) => {
                   .catch((e) => { row.errors['VirusTotal'] = e instanceof Error ? e.message : 'Error' })
               : Promise.resolve(),
             combinedSources.includes('OTX Alienvault')
-              ? checkOTX(indicator)
+              ? checkOTX(indicator, env)
                   .then((r) => { row.otx = formatOTXResult(r, indicator) })
                   .catch((e) => { row.errors['OTX Alienvault'] = e instanceof Error ? e.message : 'Error' })
               : Promise.resolve(),
