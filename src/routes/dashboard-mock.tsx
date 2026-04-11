@@ -11,6 +11,14 @@ dashboardMock.get('/', (c) => {
           <div class="text-5xl mb-3">🚧</div>
           <h2 class="text-lg font-bold mb-1">Under Development</h2>
           <p class="text-sm opacity-60">This dashboard is currently being built. Check back soon.</p>
+          <a
+            href="/intelligence"
+            {...{ 'hx-get': '/intelligence', 'hx-target': '#page-content', 'hx-push-url': 'true', 'hx-swap': 'innerHTML' }}
+            class="btn btn-primary btn-sm mt-4 gap-2 shadow-lg hover:shadow-xl transition-all duration-300 hover:-translate-y-0.5"
+          >
+            <span>🔍</span>
+            <span>Go to Intelligence Check</span>
+          </a>
         </div>
       </div>
     <div class="space-y-6">
