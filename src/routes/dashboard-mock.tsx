@@ -1,363 +1,437 @@
 import { Hono } from 'hono'
+import { getDB, query, queryOne } from '../lib/db'
 
 const dashboardMock = new Hono()
 
-dashboardMock.get('/', (c) => {
+interface OverviewRow {
+  total_checks: number
+  malicious_checks: number
+  error_checks: number
+  unique_indicators: number
+}
+
+interface SessionRow {
+  active_sessions: number
+}
+
+interface HourlyTrendRow {
+  hour: string
+  total_checks: number
+  malicious_checks: number
+}
+
+interface ServiceRow {
+  service: string
+  total: number
+  malicious: number
+}
+
+interface AuthRow {
+  event: string
+  total: number
+}
+
+interface ThreatRow {
+  id: string
+  indicator: string
+  service: string
+  source: string
+  ip_address: string
+  created_at: string
+  summary_json: string
+}
+
+interface HotIndicatorRow {
+  indicator: string
+  hits: number
+  last_seen: string
+}
+
+function summarizeThreat(summary: string): { severity: 'critical' | 'high' | 'medium' | 'low'; verdict: string } {
+  try {
+    const s = JSON.parse(summary)
+    const statuses: string[] = []
+    if (s.status) statuses.push(String(s.status).toLowerCase())
+    if (s.abdb?.status) statuses.push(String(s.abdb.status).toLowerCase())
+    if (s.vt?.status) statuses.push(String(s.vt.status).toLowerCase())
+    if (s.otx?.status) statuses.push(String(s.otx.status).toLowerCase())
+    if (s.tfox?.status) statuses.push(String(s.tfox.status).toLowerCase())
+
+    if (statuses.includes('malicious')) return { severity: 'critical', verdict: 'malicious' }
+    if (statuses.includes('suspicious')) return { severity: 'high', verdict: 'suspicious' }
+
+    const score = Number(s.score ?? s.abdb?.score ?? 0)
+    if (score >= 80) return { severity: 'critical', verdict: 'high score' }
+    if (score >= 50) return { severity: 'high', verdict: 'elevated score' }
+    if (score >= 20) return { severity: 'medium', verdict: 'watchlist' }
+    return { severity: 'low', verdict: 'low confidence' }
+  } catch {
+    return { severity: 'medium', verdict: 'needs review' }
+  }
+}
+
+dashboardMock.get('/', async (c) => {
+  const db = getDB(c)
+
+  const overview = await queryOne<OverviewRow>(
+    db,
+    `
+      SELECT
+        COUNT(*) AS total_checks,
+        SUM(CASE WHEN is_malicious = 1 THEN 1 ELSE 0 END) AS malicious_checks,
+        SUM(CASE WHEN result LIKE '%"error"%' THEN 1 ELSE 0 END) AS error_checks,
+        COUNT(DISTINCT indicator) AS unique_indicators
+      FROM check_logs
+    `
+  )
+
+  const sessions = await queryOne<SessionRow>(
+    db,
+    `
+      SELECT COUNT(*) AS active_sessions
+      FROM sessions
+      WHERE is_active = 1
+        AND julianday(expires_at) > julianday('now')
+    `
+  )
+
+  const hourlyTrendRows = await query<HourlyTrendRow>(
+    db,
+    `
+      WITH RECURSIVE hourly_window(step, hour_ts) AS (
+        SELECT 0, strftime('%Y-%m-%d %H:00:00', 'now', '-167 hours')
+        UNION ALL
+        SELECT
+          step + 1,
+          strftime('%Y-%m-%d %H:00:00', hour_ts, '+1 hour')
+        FROM hourly_window
+        WHERE step < 167
+      ),
+      rollup AS (
+        SELECT
+          strftime('%Y-%m-%d %H:00:00', created_at) AS hour_ts,
+          COUNT(*) AS total_checks,
+          SUM(CASE WHEN is_malicious = 1 THEN 1 ELSE 0 END) AS malicious_checks
+        FROM check_logs
+        WHERE julianday(created_at) >= julianday('now', '-7 days')
+        GROUP BY strftime('%Y-%m-%d %H:00:00', created_at)
+      )
+      SELECT
+        hourly_window.hour_ts AS hour,
+        COALESCE(rollup.total_checks, 0) AS total_checks,
+        COALESCE(rollup.malicious_checks, 0) AS malicious_checks
+      FROM hourly_window
+      LEFT JOIN rollup ON rollup.hour_ts = hourly_window.hour_ts
+      ORDER BY hourly_window.hour_ts ASC
+    `
+  )
+
+  const serviceRows = await query<ServiceRow>(
+    db,
+    `
+      SELECT
+        service,
+        COUNT(*) AS total,
+        SUM(CASE WHEN is_malicious = 1 THEN 1 ELSE 0 END) AS malicious
+      FROM check_logs
+      WHERE julianday(created_at) >= julianday('now', '-7 days')
+      GROUP BY service
+      ORDER BY total DESC
+      LIMIT 8
+    `
+  )
+
+  const authRows = await query<AuthRow>(
+    db,
+    `
+      SELECT event, COUNT(*) AS total
+      FROM auth_logs
+      WHERE julianday(created_at) >= julianday('now', '-7 days')
+      GROUP BY event
+      ORDER BY total DESC
+    `
+  )
+
+  const threatRows = await query<ThreatRow>(
+    db,
+    `
+      SELECT id, indicator, service, source, ip_address, created_at, summary_json
+      FROM check_logs
+      WHERE is_malicious = 1
+      ORDER BY created_at DESC
+      LIMIT 8
+    `
+  )
+
+  const hotIndicators = await query<HotIndicatorRow>(
+    db,
+    `
+      SELECT indicator, COUNT(*) AS hits, MAX(created_at) AS last_seen
+      FROM check_logs
+      WHERE is_malicious = 1
+      GROUP BY indicator
+      ORDER BY hits DESC, last_seen DESC
+      LIMIT 6
+    `
+  )
+
+  const payload = {
+    trends: hourlyTrendRows,
+    services: serviceRows,
+    auth: authRows,
+  }
+
+  const totalChecks = Number(overview?.total_checks ?? 0)
+  const maliciousChecks = Number(overview?.malicious_checks ?? 0)
+  const errorChecks = Number(overview?.error_checks ?? 0)
+  const uniqueIndicators = Number(overview?.unique_indicators ?? 0)
+  const activeSessions = Number(sessions?.active_sessions ?? 0)
+  const maliciousRate = totalChecks > 0 ? Math.round((maliciousChecks / totalChecks) * 100) : 0
+
   return c.render(
-    <div class="relative">
-      {/* ── UNDER DEVELOPMENT GLASS OVERLAY ── */}
-      <div class="absolute inset-0 z-20 backdrop-blur-sm bg-base-100/50 flex flex-col items-center justify-start pt-20 sm:pt-16 md:pt-32 rounded-xl pointer-events-none">
-        <div class="card bg-base-100/80 border border-base-300 shadow-2xl px-8 py-6 text-center max-w-xs pointer-events-auto mx-auto">
-          <div class="text-5xl mb-3">🚧</div>
-          <h2 class="text-lg font-bold mb-1">Under Development</h2>
-          <p class="text-sm opacity-60">This dashboard is currently being built. Check back soon.</p>
-          <a
-            href="/intelligence"
-            {...{ 'hx-get': '/intelligence', 'hx-target': '#page-content', 'hx-push-url': 'true', 'hx-swap': 'innerHTML' }}
-            class="btn btn-primary btn-sm mt-4 gap-2 shadow-lg hover:shadow-xl transition-all duration-300 hover:-translate-y-0.5"
-          >
-            <span>🔍</span>
-            <span>Go to Intelligence Check</span>
-          </a>
-        </div>
-      </div>
     <div class="space-y-6">
-      {/* HERO ALERT WITH CLOSE */}
-      <div class="alert alert-error alert-soft shadow-lg border border-error/30">
-        <div class="flex items-start justify-between w-full">
-          <div class="flex items-start gap-3">
-            <span class="text-2xl">🚨</span>
+      <div class="card bg-gradient-to-r from-base-200 via-base-100 to-base-200 border border-base-300 shadow-lg">
+        <div class="card-body py-5">
+          <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
             <div>
-              <h3 class="font-bold">Critical Threat Active</h3>
-              <p class="text-sm opacity-90">DDoS attack detected on primary gateway - Response team notified</p>
+              <h1 class="text-2xl sm:text-3xl font-bold">Security Operations Dashboard</h1>
+              <p class="text-sm opacity-70">Live visualization from D1 audit and intelligence telemetry.</p>
+            </div>
+            <div class="flex items-center gap-2">
+              <span class={`badge ${maliciousRate >= 50 ? 'badge-error' : maliciousRate >= 20 ? 'badge-warning' : 'badge-success'} badge-lg`}>
+                Malicious Rate: {maliciousRate}%
+              </span>
+              <a
+                href="/intelligence"
+                {...{ 'hx-get': '/intelligence', 'hx-target': '#page-content', 'hx-push-url': 'true', 'hx-swap': 'innerHTML' }}
+                class="btn btn-primary btn-sm"
+              >
+                Run Intelligence Check
+              </a>
             </div>
           </div>
-          <button class="btn btn-xs btn-ghost">✕</button>
         </div>
       </div>
 
-      {/* TOP STATS WITH ANIMATIONS */}
-      <div class="grid gap-2 sm:gap-3 md:gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 mb-2">
-        {[
-          { icon: '🎯', title: 'Threats Detected', value: '247', desc: '↗ 12% from last week', color: 'error', trend: 'up', goodTrend: false },
-          { icon: '✓', title: 'Blocked Attacks', value: '1,284', desc: '↗ 5.2% from last week', color: 'success', trend: 'up', goodTrend: true },
-          { icon: '⚠️', title: 'Vulnerabilities', value: '42', desc: '↘ 3 patched this week', color: 'warning', trend: 'down', goodTrend: false },
-          { icon: '📡', title: 'Network Uptime', value: '99.8%', desc: '↗ 0.1% from last month', color: 'info', trend: 'up', goodTrend: true }
-        ].map((stat) => (
-          <div key={stat.title} class="card bg-base-100 shadow-md hover:shadow-lg transition-all duration-300 border border-base-300 hover:border-base-400">
-            <div class="card-body p-4">
-              <div class="flex justify-between items-start">
-                <div>
-                  <div class="text-3xl sm:text-4xl mb-2">{stat.icon}</div>
-                  <h3 class="text-xs font-bold opacity-70 uppercase">{stat.title}</h3>
-                  <div class={`text-2xl sm:text-3xl font-bold mt-1 text-${stat.color}`}>{stat.value}</div>
-                </div>
-                <div class={`badge badge-outline text-xs ${ (stat.trend === 'up') === stat.goodTrend ? 'badge-success' : 'badge-error' }`}>
-                  {stat.desc}
-                </div>
-              </div>
-            </div>
-          </div>
-        ))}
+      <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
+        <div class="stat bg-base-100 border border-base-300 rounded-xl shadow-sm">
+          <div class="stat-title">Total Checks</div>
+          <div class="stat-value text-primary">{totalChecks}</div>
+          <div class="stat-desc">All-time intelligence queries</div>
+        </div>
+        <div class="stat bg-base-100 border border-base-300 rounded-xl shadow-sm">
+          <div class="stat-title">Malicious Hits</div>
+          <div class="stat-value text-error">{maliciousChecks}</div>
+          <div class="stat-desc">Flagged by any source</div>
+        </div>
+        <div class="stat bg-base-100 border border-base-300 rounded-xl shadow-sm">
+          <div class="stat-title">Errors Logged</div>
+          <div class="stat-value text-warning">{errorChecks}</div>
+          <div class="stat-desc">Provider/API failures</div>
+        </div>
+        <div class="stat bg-base-100 border border-base-300 rounded-xl shadow-sm">
+          <div class="stat-title">Unique Indicators</div>
+          <div class="stat-value text-info">{uniqueIndicators}</div>
+          <div class="stat-desc">Distinct IPs/domains/hashes</div>
+        </div>
+        <div class="stat bg-base-100 border border-base-300 rounded-xl shadow-sm">
+          <div class="stat-title">Active Sessions</div>
+          <div class="stat-value text-success">{activeSessions}</div>
+          <div class="stat-desc">Unexpired authenticated sessions</div>
+        </div>
       </div>
 
-      {/* MAIN CHARTS SECTION */}
-      <div class="grid gap-6 grid-cols-1 lg:grid-cols-3 mb-6">
-        {/* THREAT TIMELINE CHART */}
-        <div class="card bg-base-100 shadow-md border border-base-300 lg:col-span-2">
+      <div class="grid grid-cols-1 xl:grid-cols-2 gap-6">
+        <div class="card bg-base-100 border border-base-300 shadow-md">
           <div class="card-body">
-            <div class="flex justify-between items-center mb-4">
+            <div class="flex items-center justify-between mb-3">
               <div>
-                <h2 class="card-title">Threat Detection Timeline</h2>
-                <p class="text-sm opacity-60">Last 24 hours threat detection activity</p>
+                <h2 class="card-title">Check Activity</h2>
+                <p class="text-sm opacity-70">7-day window, hourly check volume.</p>
               </div>
-              <div class="tabs tabs-boxed bg-base-200">
-                <button class="tab tab-active tab-sm sm:tab-md">24H</button>
-                <button class="tab tab-sm sm:tab-md">7D</button>
-                <button class="tab tab-sm sm:tab-md">30D</button>
-              </div>
+              <span class="badge badge-outline">7d hourly</span>
             </div>
+            <div class="h-80 rounded-xl bg-base-200/60 p-2">
+              <canvas id="checkActivityChart" style="width:100%;height:100%;display:block;"></canvas>
+            </div>
+          </div>
+        </div>
 
-            <div class="h-72 rounded-lg overflow-hidden bg-base-200 relative">
-              <canvas id="threatTimelineChart" style="width:100%;height:100%;display:block;"></canvas>
+        <div class="card bg-base-100 border border-base-300 shadow-md">
+          <div class="card-body">
+            <div class="flex items-center justify-between mb-3">
+              <div>
+                <h2 class="card-title">Threat Detected</h2>
+                <p class="text-sm opacity-70">7-day window, hourly malicious detections.</p>
+              </div>
+              <span class="badge badge-outline">7d hourly</span>
             </div>
+            <div class="h-80 rounded-xl bg-base-200/60 p-2">
+              <canvas id="threatDetectedChart" style="width:100%;height:100%;display:block;"></canvas>
+            </div>
+          </div>
+        </div>
+      </div>
 
-            <div class="stats stats-vertical md:stats-horizontal bg-base-200/50 mt-4 rounded-lg">
-              <div class="stat">
-                <div class="stat-title text-xs">Avg Malicious/hr</div>
-                <div class="stat-value text-error text-2xl" id="tl-statAvg">—</div>
-              </div>
-              <div class="stat">
-                <div class="stat-title text-xs">Peak Malicious</div>
-                <div class="stat-value text-warning text-2xl" id="tl-statPeak">—</div>
-              </div>
-              <div class="stat">
-                <div class="stat-title text-xs">Total Events 24H</div>
-                <div class="stat-value text-info text-2xl" id="tl-statTotal">—</div>
-              </div>
+      <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <div class="card bg-base-100 border border-base-300 shadow-md">
+          <div class="card-body">
+            <h2 class="card-title">Auth Event Distribution (7 Days)</h2>
+            <div class="flex flex-wrap gap-2 mt-1">
+              {authRows.length === 0
+                ? <span class="badge badge-ghost">No auth events in window</span>
+                : authRows.map((row) => (
+                    <span
+                      key={row.event}
+                      class={`badge ${row.event.includes('failure') ? 'badge-error' : row.event.includes('success') ? 'badge-success' : 'badge-neutral'}`}
+                    >
+                      {row.event}: {row.total}
+                    </span>
+                  ))}
             </div>
-            <script dangerouslySetInnerHTML={{ __html: `
+            <div class="divider my-2"></div>
+            <h3 class="font-semibold text-sm opacity-80">Hot Indicators</h3>
+            <div class="space-y-2 mt-2">
+              {hotIndicators.length === 0
+                ? <div class="alert alert-soft"><span>No malicious indicator hotspots yet.</span></div>
+                : hotIndicators.map((row) => (
+                    <div key={row.indicator} class="flex items-center justify-between bg-base-200/60 rounded-lg px-3 py-2">
+                      <div class="min-w-0">
+                        <p class="font-mono text-xs truncate">{row.indicator}</p>
+                        <p class="text-xs opacity-60">Last seen {new Date(row.last_seen).toLocaleString('en-GB')}</p>
+                      </div>
+                      <span class="badge badge-error badge-sm">{row.hits} hits</span>
+                    </div>
+                  ))}
+            </div>
+          </div>
+        </div>
+
+        <div class="card bg-base-100 border border-base-300 shadow-md">
+          <div class="card-body">
+            <div class="flex items-center justify-between">
+              <h2 class="card-title">Latest Malicious Events</h2>
+              <span class="badge badge-outline">Newest first</span>
+            </div>
+            <div class="overflow-x-auto mt-2">
+              <table class="table table-zebra table-sm">
+                <thead>
+                  <tr>
+                    <th>Indicator</th>
+                    <th>Service</th>
+                    <th>Severity</th>
+                    <th>Verdict</th>
+                    <th>Time</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {threatRows.length === 0
+                    ? <tr><td colSpan={5} class="text-center opacity-60">No malicious events found.</td></tr>
+                    : threatRows.map((threat) => {
+                        const parsed = summarizeThreat(threat.summary_json)
+                        const sevBadge = parsed.severity === 'critical'
+                          ? 'badge-error'
+                          : parsed.severity === 'high'
+                            ? 'badge-warning'
+                            : parsed.severity === 'medium'
+                              ? 'badge-info'
+                              : 'badge-success'
+                        return (
+                          <tr key={threat.id}>
+                            <td>
+                              <div class="font-mono text-xs max-w-44 truncate" title={threat.indicator}>{threat.indicator}</div>
+                              <div class="text-[11px] opacity-60">{threat.ip_address}</div>
+                            </td>
+                            <td>
+                              <span class="badge badge-outline badge-sm">{threat.service}</span>
+                            </td>
+                            <td><span class={`badge badge-sm ${sevBadge}`}>{parsed.severity}</span></td>
+                            <td class="text-xs">{parsed.verdict}</td>
+                            <td class="text-xs whitespace-nowrap">{new Date(threat.created_at).toLocaleString('en-GB')}</td>
+                          </tr>
+                        )
+                      })}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <script id="dashboard-payload" type="application/json" dangerouslySetInnerHTML={{ __html: JSON.stringify(payload) }} />
+      <script dangerouslySetInnerHTML={{ __html: `
 (function(){
-  function drawChart(){
-    var canvas = document.getElementById('threatTimelineChart');
-    if(!canvas) return;
+  function prepareCanvas(canvas){
+    if(!canvas) return null;
     var dpr = window.devicePixelRatio || 1;
     var rect = canvas.getBoundingClientRect();
     if(!rect.width || !rect.height) return;
     canvas.width = rect.width * dpr;
     canvas.height = rect.height * dpr;
     var ctx = canvas.getContext('2d');
+    if(!ctx) return null;
     ctx.scale(dpr, dpr);
-    var W = rect.width, H = rect.height;
-    var N = 24;
-    function rand(max, base){ return Array.from({length:N}, function(){ return Math.floor(Math.random()*max)+base; }); }
-    var series = [
-      { label:'Malicious',  color:'#ef4444', fill:'rgba(239,68,68,0.09)',   data: rand(45, 2)  },
-      { label:'Suspicious', color:'#f59e0b', fill:'rgba(245,158,11,0.09)',  data: rand(35, 8)  },
-      { label:'Blocked',    color:'#22c55e', fill:'rgba(34,197,94,0.09)',   data: rand(65, 15) }
-    ];
-    var allVals = series.reduce(function(a,s){ return a.concat(s.data); }, []);
-    var maxV = Math.max.apply(null, allVals) || 1;
-    var pT=24, pB=36, pL=40, pR=16;
-    var cW=W-pL-pR, cH=H-pT-pB;
-    ctx.strokeStyle = 'rgba(128,128,128,0.15)';
-    ctx.lineWidth = 1;
-    for(var g=0;g<=4;g++){
-      var gy = pT + (cH/4)*g;
-      ctx.beginPath(); ctx.moveTo(pL,gy); ctx.lineTo(pL+cW,gy); ctx.stroke();
-      ctx.fillStyle = 'rgba(128,128,128,0.6)';
-      ctx.font = '9px sans-serif'; ctx.textAlign = 'right';
-      ctx.fillText(Math.round(maxV - (maxV/4)*g), pL-4, gy+3);
-    }
-    ctx.fillStyle = 'rgba(128,128,128,0.6)';
-    ctx.font = '9px sans-serif'; ctx.textAlign = 'center';
-    [0,4,8,12,16,20,23].forEach(function(i){
-      var x = pL + (cW/(N-1))*i;
-      ctx.fillText((i<10?'0':'')+i+':00', x, H-6);
-    });
-    series.forEach(function(s){
-      ctx.beginPath();
-      s.data.forEach(function(val,i){ var x=pL+(cW/(N-1))*i, y=pT+cH-(val/maxV)*cH; if(i===0) ctx.moveTo(x,y); else ctx.lineTo(x,y); });
-      ctx.lineTo(pL+cW, pT+cH); ctx.lineTo(pL, pT+cH); ctx.closePath();
-      ctx.fillStyle = s.fill; ctx.fill();
-      ctx.beginPath();
-      s.data.forEach(function(val,i){ var x=pL+(cW/(N-1))*i, y=pT+cH-(val/maxV)*cH; if(i===0) ctx.moveTo(x,y); else ctx.lineTo(x,y); });
-      ctx.strokeStyle = s.color; ctx.lineWidth = 2; ctx.lineJoin = 'round'; ctx.stroke();
-    });
-    series.forEach(function(s,i){
-      var lx = pL + i*95, ly = pT+2;
-      ctx.fillStyle = s.color; ctx.fillRect(lx, ly, 14, 3);
-      ctx.fillStyle = 'rgba(128,128,128,0.8)';
-      ctx.font = '10px sans-serif'; ctx.textAlign = 'left';
-      ctx.fillText(s.label, lx+18, ly+4);
-    });
-    var malData = series[0].data;
-    var avg = Math.round(malData.reduce(function(a,b){return a+b;},0)/malData.length);
-    var peak = Math.max.apply(null, malData);
-    var total = allVals.reduce(function(a,b){return a+b;},0);
-    var e1=document.getElementById('tl-statAvg'), e2=document.getElementById('tl-statPeak'), e3=document.getElementById('tl-statTotal');
-    if(e1) e1.textContent = avg+'/hr';
-    if(e2) e2.textContent = String(peak);
-    if(e3) e3.textContent = String(total);
+    return { ctx: ctx, width: rect.width, height: rect.height };
   }
-  if(document.readyState==='loading') document.addEventListener('DOMContentLoaded', drawChart); else drawChart();
-  window.addEventListener('resize', drawChart);
+  function readPayload(){
+    var el = document.getElementById('dashboard-payload');
+    if(!el) return { trends: [], services: [], auth: [] };
+    try { return JSON.parse(el.textContent || '{}'); } catch { return { trends: [], services: [], auth: [] }; }
+  }
+  function drawHourlyLineChart(canvasId, data, valueKey, lineColor, fillColor){
+    var prep = prepareCanvas(document.getElementById(canvasId));
+    if(!prep) return;
+    var ctx = prep.ctx, W = prep.width, H = prep.height;
+    var p = { t: 20, r: 16, b: 34, l: 34 };
+    var cw = W - p.l - p.r, ch = H - p.t - p.b;
+    var labels = data.map(function(d){
+      var hour = String(d.hour || '');
+      return hour.slice(5, 10) + ' ' + hour.slice(11, 13) + ':00';
+    });
+    var series = data.map(function(d){ return Number(d[valueKey] || 0); });
+    var maxV = Math.max.apply(null, series.concat([1]));
+    for(var g=0; g<=4; g++){
+      var y = p.t + (ch/4)*g;
+      ctx.strokeStyle = 'rgba(140,140,140,0.16)';
+      ctx.beginPath(); ctx.moveTo(p.l, y); ctx.lineTo(p.l+cw, y); ctx.stroke();
+    }
+    if(series.length > 0){
+      ctx.beginPath();
+      series.forEach(function(v, i){
+        var x = p.l + (series.length === 1 ? cw/2 : (cw/(series.length-1))*i);
+        var y = p.t + ch - (Number(v)/maxV)*ch;
+        if(i===0) ctx.moveTo(x,y); else ctx.lineTo(x,y);
+      });
+      ctx.lineWidth = 2.2;
+      ctx.strokeStyle = lineColor;
+      ctx.lineJoin = 'round';
+      ctx.stroke();
+
+      ctx.lineTo(p.l + cw, p.t + ch);
+      ctx.lineTo(p.l, p.t + ch);
+      ctx.closePath();
+      ctx.fillStyle = fillColor;
+      ctx.fill();
+    }
+
+    ctx.fillStyle = 'rgba(120,120,120,0.8)';
+    ctx.font = '10px sans-serif';
+    ctx.textAlign = 'center';
+    labels.forEach(function(lbl, i){
+      var x = p.l + (labels.length === 1 ? cw/2 : (cw/(labels.length-1))*i);
+      if(i % 24 === 0 || i === labels.length - 1) ctx.fillText(lbl, x, H-10);
+    });
+  }
+  function drawAll(){
+    var payload = readPayload();
+    var trends = Array.isArray(payload.trends) ? payload.trends : [];
+    drawHourlyLineChart('checkActivityChart', trends, 'total_checks', '#0ea5e9', 'rgba(14,165,233,0.14)');
+    drawHourlyLineChart('threatDetectedChart', trends, 'malicious_checks', '#ef4444', 'rgba(239,68,68,0.14)');
+  }
+  if(document.readyState==='loading') document.addEventListener('DOMContentLoaded', drawAll); else drawAll();
+  window.addEventListener('resize', drawAll);
 })();
             ` }} />
-          </div>
-        </div>
-
-        {/* QUICK ACTION PANEL */}
-        <div class="card bg-base-100 shadow-md border border-base-300">
-          <div class="card-body">
-              <h2 class="card-title text-lg sm:text-xl mb-4">Quick Actions</h2>
-            <div class="space-y-2">
-              {[
-                { icon: '🔍', label: 'Port Scan', color: 'error' },
-                { icon: '🛡️', label: 'Vulnerability Scan', color: 'warning' },
-                { icon: '📊', label: 'Whois Lookup', color: 'info' },
-                { icon: '🧹', label: 'Full Audit', color: 'success' }
-              ].map((action) => (
-                <button key={action.label} class={`btn btn-${action.color} btn-outline btn-block btn-sm sm:btn-md justify-start`}>
-                  <span class="text-base sm:text-lg">{action.icon}</span>
-                  {action.label}
-                </button>
-              ))}
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* VULNERABILITY & SECURITY STATUS */}
-      <div class="grid gap-3 sm:gap-4 md:gap-6 grid-cols-1 lg:grid-cols-2 mb-6">
-        <div class="card bg-base-100 shadow-md border border-base-300">
-          <div class="card-body p-3 sm:p-4 md:p-6">
-            <h2 class="card-title text-base sm:text-lg mb-4">Vulnerability Overview</h2>
-            <div class="space-y-3">
-              {[
-                { level: 'Critical', count: 8, color: 'error', width: 'w-full' },
-                { level: 'High', count: 24, color: 'warning', width: 'w-5/6' },
-                { level: 'Medium', count: 10, color: 'info', width: 'w-4/6' },
-                { level: 'Low', count: 5, color: 'success', width: 'w-3/6' }
-              ].map((vuln) => (
-                <div key={vuln.level} class="space-y-1">
-                  <div class="flex justify-between items-center">
-                    <span class="font-semibold text-sm">{vuln.level}</span>
-                    <span class={`badge badge-${vuln.color}`}>{vuln.count} issues</span>
-                  </div>
-                  <progress class={`progress progress-${vuln.color} w-full`} value={vuln.count * 12.5} max="100"></progress>
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
-
-        <div class="card bg-base-100 shadow-md border border-base-300">
-          <div class="card-body p-3 sm:p-4 md:p-6">
-            <h2 class="card-title text-base sm:text-lg mb-4">Security Systems</h2>
-            <div class="space-y-2">
-              {[
-                { name: 'Firewall', status: 'Protected', color: 'success', uptime: '100%' },
-                { name: 'IDS/IPS', status: 'Active', color: 'success', uptime: '99.9%' },
-                { name: 'WAF', status: 'Updating', color: 'warning', uptime: '98.5%' },
-                { name: 'SSL/TLS', status: 'Secure', color: 'success', uptime: '100%' }
-              ].map((sys) => (
-                <div key={sys.name} class="flex items-center justify-between p-3 bg-base-200/50 rounded-lg hover:bg-base-200 transition-colors">
-                  <div class="flex items-center gap-3">
-                    <span class={`status status-md status-${sys.color}`}></span>
-                    <div>
-                      <p class="font-semibold text-sm">{sys.name}</p>
-                      <p class="text-xs opacity-60">Uptime: {sys.uptime}</p>
-                    </div>
-                  </div>
-                  <span class={`badge badge-${sys.color} badge-sm`}>{sys.status}</span>
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* THREAT INTELLIGENCE TABLE */}
-      <div class="card bg-base-100 shadow-md border border-base-300">
-        <div class="card-body">
-          <div class="flex justify-between items-center mb-4">
-            <div>
-              <h2 class="card-title">Recent Threats</h2>
-              <p class="text-sm opacity-60">Live threat intelligence feed</p>
-            </div>
-            <button class="btn btn-sm btn-outline">🔄 Refresh</button>
-          </div>
-
-          <div class="overflow-x-auto">
-            <table class="table table-zebra w-full table-sm">
-              <thead class="bg-base-200">
-                <tr>
-                  <th class="font-bold">Threat ID</th>
-                  <th class="font-bold">Source IP</th>
-                  <th class="font-bold">Type</th>
-                  <th class="font-bold">Severity</th>
-                  <th class="font-bold">Status</th>
-                  <th class="font-bold">Action</th>
-                </tr>
-              </thead>
-              <tbody>
-                {[
-                  { id: '#THR-2401', source: '192.168.1.105', type: 'Malware', severity: 'Critical', status: 'Quarantined', icon: '🔒' },
-                  { id: '#THR-2402', source: '10.0.0.42', type: 'Phishing', severity: 'High', status: 'Blocked', icon: '🚫' },
-                  { id: '#THR-2403', source: '172.16.0.8', type: 'DDoS', severity: 'Critical', status: 'Mitigating', icon: '⚔️' },
-                  { id: '#THR-2404', source: '203.0.113.45', type: 'Reconnaissance', severity: 'Medium', status: 'Monitored', icon: '👁️' },
-                  { id: '#THR-2405', source: '198.51.100.12', type: 'Exploit', severity: 'High', status: 'Patched', icon: '✓' },
-                ].map((threat) => (
-                  <tr key={threat.id} class="hover:bg-base-200 transition-colors">
-                    <td><span class="font-mono font-bold text-primary">{threat.id}</span></td>
-                    <td><code class="bg-base-200 px-2 py-1 rounded text-xs">{threat.source}</code></td>
-                    <td><span class="font-semibold">{threat.type}</span></td>
-                    <td>
-                      <span class={`badge badge-${threat.severity === 'Critical' ? 'error' : threat.severity === 'High' ? 'warning' : 'info'}`}>
-                        {threat.severity}
-                      </span>
-                    </td>
-                    <td>
-                      <span class="flex items-center gap-1">
-                        <span>{threat.icon}</span>
-                        <span class="text-sm">{threat.status}</span>
-                      </span>
-                    </td>
-                    <td><button class="btn btn-ghost btn-xs hover:btn-primary">Details →</button></td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-
-          <div class="divider my-2"></div>
-          <div class="flex justify-between items-center">
-            <span class="text-sm opacity-70">Showing 5 of 847 threats</span>
-            <div class="join">
-              <button class="join-item btn btn-xs btn-outline">«</button>
-              <button class="join-item btn btn-xs btn-active">1</button>
-              <button class="join-item btn btn-xs btn-outline">2</button>
-              <button class="join-item btn btn-xs btn-outline">3</button>
-              <button class="join-item btn btn-xs btn-outline">»</button>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* INTEL FEEDS & DOMAINS */}
-      <div class="grid gap-6 grid-cols-1 lg:grid-cols-2">
-        <div class="card bg-base-100 shadow-md border border-base-300">
-          <div class="card-body">
-            <h2 class="card-title mb-4">Active Intelligence Feeds</h2>
-            <div class="space-y-3">
-              {[
-                { feed: 'MISP Feed', status: 'Active', time: '2 mins ago', updates: 142 },
-                { feed: 'URLhaus', status: 'Active', time: '5 mins ago', updates: 87 },
-                { feed: 'Abuse.ch', status: 'Active', time: '8 mins ago', updates: 23 },
-                { feed: 'Custom Feed', status: 'Active', time: '1 hour ago', updates: 5 }
-              ].map((feed) => (
-                <div key={feed.feed} class="flex items-center justify-between p-3 bg-base-200/30 rounded-lg hover:bg-base-200 transition-colors group cursor-pointer">
-                  <div class="flex items-center gap-3">
-                    <span class="status status-md status-success"></span>
-                    <div>
-                      <p class="font-semibold text-sm">{feed.feed}</p>
-                      <p class="text-xs opacity-60">Last update: {feed.time}</p>
-                    </div>
-                  </div>
-                  <span class="badge badge-success badge-sm group-hover:badge-lg transition-all">{feed.updates}</span>
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
-
-        <div class="card bg-base-100 shadow-md border border-base-300">
-          <div class="card-body">
-            <h2 class="card-title mb-4">Monitored Malicious Domains</h2>
-            <div class="space-y-3">
-              {[
-                { domain: 'malicious-site.ru', risk: 'High', lastSeen: '1 min ago', badge: 'warning' },
-                { domain: 'phishing-portal.net', risk: 'Critical', lastSeen: '5 mins ago', badge: 'error' },
-                { domain: 'c2-server.xyz', risk: 'Critical', lastSeen: '12 mins ago', badge: 'error' },
-                { domain: 'suspicious-domain.com', risk: 'Medium', lastSeen: '1 hour ago', badge: 'info' }
-              ].map((item) => (
-                <div key={item.domain} class="flex items-center justify-between p-3 bg-base-200/30 rounded-lg hover:bg-base-200 transition-colors group cursor-pointer">
-                  <div class="flex items-center gap-3 flex-1 min-w-0">
-                    <span class={`badge badge-${item.badge} badge-lg`}>▼</span>
-                    <div class="flex-1 min-w-0">
-                      <p class="font-mono text-sm truncate">{item.domain}</p>
-                      <p class="text-xs opacity-60">Seen: {item.lastSeen}</p>
-                    </div>
-                  </div>
-                  <span class={`badge badge-${item.badge} badge-outline badge-sm whitespace-nowrap ml-2`}>{item.risk}</span>
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
     </div>,
     // @ts-expect-error — Hono ContextRenderer not extended
     { title: 'Dashboard' }
