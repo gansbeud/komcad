@@ -369,10 +369,6 @@ adminManage.post('/update/:id', async (c) => {
       return c.html(alertHtml('error', 'Invalid role selected'), 400)
     }
 
-    if (password.length > 0 && password.length < 6) {
-      return c.html(alertHtml('error', 'New password must be at least 6 characters'), 400)
-    }
-
     const existing = await queryOne<Pick<UserRow, 'id'>>(
       db,
       'SELECT id FROM users WHERE username = ? AND id != ?',
