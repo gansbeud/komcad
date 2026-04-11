@@ -4,6 +4,7 @@ import { checkVirusTotal, formatVirusTotalResult } from '../lib/virustotal'
 import { checkOTX, formatOTXResult } from '../lib/otx'
 import { checkThreatFox, formatThreatFoxResult } from '../lib/threatfox'
 import { logCheckEvents } from '../lib/checklog'
+import { getDB } from '../lib/db'
 
 type IntelligenceEnv = {
   ABUSEIPDB_API_KEY: string
@@ -219,7 +220,7 @@ intelligence.post('/api/check', async (c) => {
       }).length
 
       // Log each indicator result
-      const _username = (c as any).get?.('username') as string ?? 'unknown'
+      const _userId = (c as any).get?.('user_id') as string ?? 'unknown'
       void logCheckEvents('intelligence', mode, source,
         combinedResults.map((r) => {
           const hasError = Object.keys(r.errors).length > 0 && !r.abdb && !r.vt && !r.otx
@@ -229,15 +230,24 @@ intelligence.post('/api/check', async (c) => {
           if (r.otx)  summaryObj.otx  = { status: r.otx.status, pulses: r.otx.pulse_count, whitelisted: r.otx.whitelisted }
           if (r.tfox) summaryObj.tfox = { status: r.tfox.status, malware: r.tfox.top_malware, confidence: r.tfox.confidence_level }
           if (Object.keys(r.errors).length > 0) summaryObj.errors = r.errors
+          
+          const isMalicious = hasError ? null : (
+            (r.abdb && (r.abdb.abuseConfidenceScore ?? 0) > 75) ||
+            (r.vt && (r.vt.last_analysis_stats?.malicious ?? 0) > 0) ||
+            (r.otx && r.otx.status === 'malicious') ||
+            (r.tfox && r.tfox.status === 'malicious')
+          ) ? 1 : 0;
+          
           return {
             indicator: r.indicator,
             result: hasError ? 'error' as const : 'success' as const,
             detail: hasError ? JSON.stringify(r.errors) : undefined,
             summary: hasError ? null : JSON.stringify(summaryObj),
+            is_malicious: hasError ? null : isMalicious,
           }
         }),
         c.req.raw,
-        { username: _username }
+        { user_id: _userId, db: getDB(c) }
       )
 
       const renderCombinedCorrelation = () => {
@@ -843,22 +853,35 @@ intelligence.post('/api/check', async (c) => {
     const maliciousCount = results.filter(r => r.result?.status === 'malicious').length
 
     // Log each indicator result
-    const _username = (c as any).get?.('username') as string ?? 'unknown'
+    const _userId = (c as any).get?.('user_id') as string ?? 'unknown'
     void logCheckEvents('intelligence', mode, source,
       results.map((r) => {
-        if (r.error) return { indicator: r.indicator, result: 'error' as const, detail: r.error, summary: null }
+        if (r.error) return { indicator: r.indicator, result: 'error' as const, detail: r.error, summary: null, is_malicious: null }
         const s = r.result
         let summaryObj: Record<string, any> | null = null
+        let isMalicious: number | null = null
         if (s) {
-          if (source === 'AbuseIPDB') summaryObj = { status: s.status, score: s.abuseConfidenceScore, reports: s.totalReports, whitelisted: s.isWhitelisted }
-          else if (source === 'VirusTotal') summaryObj = { status: s.status, malicious: s.last_analysis_stats?.malicious, suspicious: s.last_analysis_stats?.suspicious }
-          else if (source === 'OTX Alienvault') summaryObj = { status: s.status, pulses: s.pulse_count, whitelisted: s.whitelisted }
-          else if (source === 'ThreatFOX') summaryObj = { status: s.status, malware: s.top_malware, confidence: s.confidence_level }
+          if (source === 'AbuseIPDB') {
+            summaryObj = { status: s.status, score: s.abuseConfidenceScore, reports: s.totalReports, whitelisted: s.isWhitelisted }
+            isMalicious = (s.abuseConfidenceScore ?? 0) > 75 ? 1 : 0
+          }
+          else if (source === 'VirusTotal') {
+            summaryObj = { status: s.status, malicious: s.last_analysis_stats?.malicious, suspicious: s.last_analysis_stats?.suspicious }
+            isMalicious = (s.last_analysis_stats?.malicious ?? 0) > 0 ? 1 : 0
+          }
+          else if (source === 'OTX Alienvault') {
+            summaryObj = { status: s.status, pulses: s.pulse_count, whitelisted: s.whitelisted }
+            isMalicious = s.status === 'malicious' ? 1 : 0
+          }
+          else if (source === 'ThreatFOX') {
+            summaryObj = { status: s.status, malware: s.top_malware, confidence: s.confidence_level }
+            isMalicious = s.status === 'malicious' ? 1 : 0
+          }
         }
-        return { indicator: r.indicator, result: 'success' as const, summary: summaryObj ? JSON.stringify(summaryObj) : null }
+        return { indicator: r.indicator, result: 'success' as const, summary: summaryObj ? JSON.stringify(summaryObj) : null, is_malicious: isMalicious }
       }),
       c.req.raw,
-      { username: _username }
+      { user_id: _userId, db: getDB(c) }
     )
 
     // Combined Analysis: cross-indicator correlation helpers

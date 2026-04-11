@@ -1,6 +1,7 @@
 import { Hono } from 'hono'
 import { lookupIP } from '../lib/whois'
 import { logCheckEvents } from '../lib/checklog'
+import { getDB } from '../lib/db'
 
 const whois = new Hono<{ Bindings: { IPINFO_API_KEY?: string } }>()
 
@@ -43,19 +44,21 @@ whois.post('/api/lookup', async (c) => {
   const bad = results.filter((r) => !r.ok)
 
   // Log each lookup result
-  const _username = (c as any).get?.('username') as string ?? 'unknown'
+  const _userId = (c as any).get?.('user_id') as string ?? 'unknown'
   void logCheckEvents('whois', 'whois', 'ipinfo.io', [
     ...ok.map((r) => ({
       indicator: r.data!.ip || r.ip,
       result: 'success' as const,
       summary: JSON.stringify({ org: r.data!.org || null, city: r.data!.city || null, region: r.data!.region || null, country: r.data!.country || null, hostname: r.data!.hostname || null }),
+      is_malicious: null,
     })),
     ...bad.map((r) => ({
       indicator: r.ip,
       result: 'error' as const,
       detail: r.error,
+      is_malicious: null,
     })),
-  ], c.req.raw, { username: _username })
+  ], c.req.raw, { user_id: _userId, db: getDB(c) })
 
   // Build JSON payload for client-side button actions
   const payload = ok.map((r) => ({

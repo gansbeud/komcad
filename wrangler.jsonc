@@ -5,7 +5,15 @@
   "pages_build_output_dir": "./dist",
   "compatibility_flags": [
     "nodejs_compat"
-  ]
+  ],
+  "d1_databases": [
+    {
+      "binding": "KOMCAD_DB",
+      "database_name": "komcad",
+      "database_id": "c13597a5-45d9-47b4-89cd-0cd69dd70685",
+      "migrations_dir": "src/db/migrations"
+    }
+  ],
   // For sensitive secrets, use: wrangler secret put VARIABLE_NAME
   // This will prompt you to enter the value securely and store it in Cloudflare
   // 
@@ -16,14 +24,13 @@
   // - wrangler secret put THREATFOX_API_KEY
   // - wrangler secret put IPINFO_API_KEY
   // - wrangler secret put JWT_SECRET
-  // - wrangler secret put ADMIN_USER
-  // - wrangler secret put ADMIN_PASS
-  // - wrangler secret put DEMO_USER
-  // - wrangler secret put DEMO_PASS
   // - wrangler secret put SMTP_HOST
   // - wrangler secret put SMTP_PORT
   // - wrangler secret put SMTP_USER
   // - wrangler secret put SMTP_PASS
   // - wrangler secret put SMTP_FROM
   // - wrangler secret put REPORT_TO
+  //
+  // Note: admin/demo credentials are seeded in D1 migrations,
+  // not injected from environment variables.
 }

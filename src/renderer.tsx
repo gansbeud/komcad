@@ -1,13 +1,16 @@
 import { jsxRenderer } from 'hono/jsx-renderer'
 
 export const renderer = jsxRenderer(({ children, title }: any, c: any) => {
-  // Extract authenticated username (set by JWT middleware)
+  // Extract authenticated user info (set by JWT middleware)
   const username: string = ((c as any).get?.('username') as string) || 'User'
+  const role: string = ((c as any).get?.('role') as string) || 'user'
   const initials = username.slice(0, 2).toUpperCase()
-  const isAdmin = username !== 'User' && username === (process.env.ADMIN_USER ?? 'administrator')
-  
-  // CSS path: dev uses source file, prod uses built static asset
-  const stylesheetPath = import.meta.env.DEV ? '/src/style.css' : '/static/style.css'
+  const isAdmin = role === 'admin'
+
+  // Runtime CSS path selection avoids build-time env mismatches in SSR.
+  const host = new URL(c.req.url).hostname
+  const isLocalDev = host === 'localhost' || host === '127.0.0.1'
+  const stylesheetPath = isLocalDev ? '/src/style.css' : '/static/style.css'
   
   // HTMX partial navigation: return only content + OOB breadcrumb swap
   if (c.req.header('HX-Request')) {
@@ -258,6 +261,16 @@ export const renderer = jsxRenderer(({ children, title }: any, c: any) => {
                           <span>Audit Log</span>
                         </a>
                       </li>
+                      <li>
+                        <a
+                          {...{ 'hx-get': '/admin/manage', 'hx-target': '#page-content', 'hx-push-url': 'true', 'hx-swap': 'innerHTML' }}
+                          class="py-1.5 hover:bg-primary/20 nav-link gap-2"
+                          data-path="/admin/manage"
+                        >
+                          <span>👥</span>
+                          <span>Manage Users</span>
+                        </a>
+                      </li>
                     </>
                   )}
 
@@ -341,6 +354,18 @@ export const renderer = jsxRenderer(({ children, title }: any, c: any) => {
                 </button>
               </div>
             </form>
+          </div>
+          <form method="dialog" class="modal-backdrop">
+            <button>close</button>
+          </form>
+        </dialog>
+
+        {/* Edit User Modal — for admin manage page */}
+        <dialog id="edit_modal" class="modal">
+          <div class="modal-box">
+            <div id="modal-content">
+              <p class="text-center opacity-50">Loading...</p>
+            </div>
           </div>
           <form method="dialog" class="modal-backdrop">
             <button>close</button>

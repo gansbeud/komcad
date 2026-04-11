@@ -1,72 +1,97 @@
 /**
- * Auth event logger — writes NDJSON (one JSON object per line) to logs/auth.log
+ * Auth event logger — writes to D1 auth_logs table
+ * Falls back to console.log in Workers environment (captured by Logpush)
  *
- * Schema is designed for direct SQL migration:
- *
- * CREATE TABLE auth_logs (
- *   id                  TEXT    PRIMARY KEY,   -- UUID v4
- *   created_at          TEXT    NOT NULL,       -- ISO 8601 UTC
- *   event               TEXT    NOT NULL,       -- 'login_success' | 'login_failure' | 'logout'
- *   username            TEXT    NOT NULL,       -- attempted or actual username
- *   ip                  TEXT    NOT NULL,       -- client IP address
- *   user_agent          TEXT    NOT NULL,       -- browser User-Agent
- *   reason              TEXT,                  -- failure reason (NULL on success)
- *   session_expires_at  TEXT                   -- ISO 8601 UTC (NULL on failure/logout)
- * );
+ * Events: login_success, login_failure, logout, session_create, session_expire
  */
 
-export type AuthEvent = 'login_success' | 'login_failure' | 'logout'
+import type { D1Database } from 'hono';
+import { execute, nowISO } from './db';
+import { generateUUID } from './crypto';
+
+export type AuthEvent = 'login_success' | 'login_failure' | 'logout' | 'session_create' | 'session_expire'
 
 export interface AuthLogEntry {
-  id:                 string        // UUID v4
-  created_at:         string        // ISO 8601 UTC
-  event:              AuthEvent
-  username:           string
-  ip:                 string
-  user_agent:         string
-  reason:             string | null // null on success
-  session_expires_at: string | null // ISO 8601 UTC on login_success, null otherwise
-}
-
-const LOG_PATH = 'logs/auth.log'
-
-export async function logAuthEvent(
-  event: AuthEvent,
-  username: string,
-  request: Request,
-  opts: { reason?: string; sessionExpiresAt?: Date } = {}
-): Promise<void> {
-  const entry: AuthLogEntry = {
-    id:                 crypto.randomUUID(),
-    created_at:         new Date().toISOString(),
-    event,
-    username:           username || '(empty)',
-    ip:                 getClientIp(request),
-    user_agent:         request.headers.get('user-agent') || '',
-    reason:             opts.reason ?? null,
-    session_expires_at: opts.sessionExpiresAt ? opts.sessionExpiresAt.toISOString() : null,
-  }
-
-  const line = JSON.stringify(entry) + '\n'
-
-  // Write to file in Node.js / Vite dev environment.
-  // In Cloudflare Workers, node:fs is unavailable — fall through to console.log.
-  try {
-    const { appendFile, mkdir } = await import('node:fs/promises')
-    await mkdir('logs', { recursive: true })
-    await appendFile(LOG_PATH, line, 'utf8')
-  } catch {
-    // Production / Workers runtime: emit to console so logs are visible in
-    // Cloudflare's Logpush / Workers Logs dashboard.
-    console.log('[auth-log]', line.trim())
-  }
+  id: string;
+  user_id: string | null;
+  event: AuthEvent;
+  ip_address: string;
+  user_agent: string;
+  failure_reason: string | null;
+  created_at: string;
+  session_id: string | null;
 }
 
 function getClientIp(req: Request): string {
   return (
     req.headers.get('cf-connecting-ip') ??
-    req.headers.get('x-forwarded-for')?.split(',')[0].trim() ??
+    req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ??
     req.headers.get('x-real-ip') ??
     'unknown'
   )
+}
+
+function getUserAgent(req: Request): string {
+  return req.headers.get('user-agent') ?? 'unknown'
+}
+
+/**
+ * Log an authentication event to D1 or console
+ * @param event - Type of auth event
+ * @param userId - User ID (null for failed logins where user doesn't exist)
+ * @param request - Request object to extract IP and User-Agent
+ * @param opts - Additional options (db, failure_reason, session_id)
+ */
+export async function logAuthEvent(
+  event: AuthEvent,
+  userId: string | null,
+  request: Request,
+  opts: { 
+    db?: D1Database;
+    reason?: string;
+    ip?: string;
+    sessionId?: string;
+    [key: string]: unknown;
+  } = {}
+): Promise<void> {
+  const entry: AuthLogEntry = {
+    id: generateUUID(),
+    user_id: userId,
+    event,
+    ip_address: opts.ip || getClientIp(request),
+    user_agent: getUserAgent(request),
+    failure_reason: opts.reason ?? null,
+    created_at: nowISO(),
+    session_id: opts.sessionId ?? null,
+  };
+
+  // Try to write to D1
+  if (opts.db) {
+    try {
+      await execute(
+        opts.db,
+        `
+        INSERT INTO auth_logs (id, user_id, event, ip_address, user_agent, failure_reason, created_at, session_id)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      `,
+        [
+          entry.id,
+          entry.user_id,
+          entry.event,
+          entry.ip_address,
+          entry.user_agent,
+          entry.failure_reason,
+          entry.created_at,
+          entry.session_id,
+        ]
+      );
+    } catch (error) {
+      console.error('Failed to log auth event to D1:', error);
+      // Fall through to console.log
+    }
+  }
+
+  // Console fallback (for Workers environment or if D1 fails)
+  const logLine = JSON.stringify(entry);
+  console.log('[auth-log]', logLine);
 }

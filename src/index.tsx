@@ -6,6 +6,7 @@ import authRoutes from './routes/auth'
 import intelligenceRoutes from './routes/intelligence'
 import whoisRoutes from './routes/whois'
 import auditlogRoutes from './routes/auditlog'
+import adminManageRoutes from './routes/admin-manage'
 import apiRoutes from './routes/api'
 import dashboardMockRoutes from './routes/dashboard-mock'
 import newsRoutes from './routes/news'
@@ -27,9 +28,29 @@ app.use('*', async (c, next) => {
     const env = c.env as any
     const secret = env?.JWT_SECRET ?? process.env.JWT_SECRET ?? 'komcad-dev-secret'
     const payload = await verify(token, secret, 'HS256') as any
-    c.set('username', payload.sub ?? 'User')
+    c.set('user_id', payload.sub ?? 'unknown')
+    c.set('username', payload.user ?? 'User')
+    c.set('role', payload.role ?? 'user')
   } catch {
     return c.redirect('/login')
+  }
+  return next()
+})
+
+// ── Admin role guard ─────────────────────────────────────────────────────────
+app.use('/admin/*', async (c, next) => {
+  const role = c.get('role')
+  if (role !== 'admin') {
+    return c.render(
+      <div class="space-y-4">
+        <h1 class="text-4xl font-bold mb-2">Access Denied</h1>
+        <div class="alert alert-error">
+          <span>You do not have permission to access this page. Admin role required.</span>
+        </div>
+        <a href="/" class="btn btn-primary">Return to Dashboard</a>
+      </div>,
+      { title: 'Access Denied' }
+    )
   }
   return next()
 })
@@ -43,7 +64,8 @@ app.route('/', dashboardMockRoutes)
 app.route('/news', newsRoutes)
 app.route('/intelligence', intelligenceRoutes)
 app.route('/whois', whoisRoutes)
-app.route('/admin', auditlogRoutes)
+app.route('/admin/auditlog', auditlogRoutes)
+app.route('/admin/manage', adminManageRoutes)
 app.route('/api', apiRoutes)
 
 export default app

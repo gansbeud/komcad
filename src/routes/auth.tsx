@@ -1,106 +1,185 @@
 import { Hono } from 'hono'
-import { sign, decode } from 'hono/jwt'
 import { setCookie, deleteCookie, getCookie } from 'hono/cookie'
 import { logAuthEvent } from '../lib/authlog'
+import { getDB } from '../lib/db'
+import { queryOne, nowISO } from '../lib/db'
+import { verifyPassword } from '../lib/crypto'
+import { createSession, validateSession, expireSession } from '../lib/session'
+import { checkRateLimit, recordAttempt } from '../lib/ratelimit-db'
 
 type AuthEnv = {
   JWT_SECRET: string
-  ADMIN_USER: string
-  ADMIN_PASS: string
-  DEMO_USER:  string
-  DEMO_PASS:  string
+}
+
+type User = {
+  id: string
+  username: string
+  password_hash: string
+  role: string
+  is_active: number
 }
 
 const auth = new Hono<{ Bindings: AuthEnv }>()
 
-// ── Login brute-force protection (in-memory, best-effort) ─────────────────
-// Note: resets per Worker isolate restart. For persistent limits use CF Rate Limiting.
-const loginAttempts = new Map<string, { count: number; resetAt: number }>()
 const LOGIN_MAX = 10
-const LOGIN_WINDOW_MS = 15 * 60 * 1000 // 15 min
+const LOGIN_WINDOW_MINUTES = 15
+
+// ── Helper: Get client IP ──────────────────────────────────────────────────
+function getClientIp(c: any): string {
+  // Try multiple header sources for IP detection (works in dev and Cloudflare Workers)
+  return (
+    c.req.header('cf-connecting-ip') ??
+    c.req.header('x-forwarded-for')?.split(',')[0]?.trim() ??
+    c.req.header('x-real-ip') ??
+    'unknown'
+  )
+}
+
+// ── Helper: Get user agent ─────────────────────────────────────────────────
+function getUserAgent(c: any): string {
+  return c.req.header('User-Agent') ?? 'unknown'
+}
 
 // ── GET /login ─────────────────────────────────────────────────────────────
 auth.get('/login', (c) => {
   const hasError = c.req.query('error') === '1'
-  return c.html(loginPage(hasError))
+  const host = new URL(c.req.url).hostname
+  const isLocalDev = host === 'localhost' || host === '127.0.0.1'
+  return c.html(loginPage(hasError, isLocalDev))
 })
 
 // ── POST /login ────────────────────────────────────────────────────────────
 auth.post('/login', async (c) => {
-  const clientIp = c.req.header('CF-Connecting-IP') ?? c.req.header('X-Forwarded-For')?.split(',')[0]?.trim() ?? 'unknown'
-  const now = Date.now()
-  const current = loginAttempts.get(clientIp)
-  if (current && now < current.resetAt) {
-    if (current.count >= LOGIN_MAX) {
-      await logAuthEvent('login_failure', 'unknown', c.req.raw, { reason: `rate_limit:${clientIp}` })
+  try {
+    const db = getDB(c)
+    const clientIp = getClientIp(c)
+    const userAgent = getUserAgent(c)
+
+    // Check rate limit
+    const { blocked, remaining } = await checkRateLimit(
+      db,
+      clientIp,
+      '/api/auth/login',
+      undefined,
+      LOGIN_MAX,
+      LOGIN_WINDOW_MINUTES
+    )
+
+    if (blocked) {
+      await logAuthEvent('login_failure', null, c.req.raw, {
+        db,
+        reason: 'rate_limited',
+        ip: clientIp,
+      })
       return c.redirect('/login?error=1')
     }
-    current.count++
-  } else {
-    loginAttempts.set(clientIp, { count: 1, resetAt: now + LOGIN_WINDOW_MS })
-  }
 
-  const body     = await c.req.parseBody()
-  const username = String(body.username ?? '').trim()
-  const password = String(body.password ?? '')
+    const body = await c.req.parseBody()
+    const username = String(body.username ?? '').trim()
+    const password = String(body.password ?? '')
 
-  const env = c.env as AuthEnv
-  // process.env fallback covers local Vite dev (dotenv loads .env.local into process.env
-  // but the Cloudflare adapter does NOT populate c.env from .env.local)
-  const getEnvVar = (key: keyof AuthEnv) =>
-    (env?.[key] as string) ?? (process.env[key] as string | undefined) ?? ''
+    if (!username || !password) {
+      await recordAttempt(db, clientIp, '/api/auth/login', undefined, LOGIN_WINDOW_MINUTES)
+      await logAuthEvent('login_failure', null, c.req.raw, {
+        db,
+        reason: 'missing_credentials',
+        ip: clientIp,
+      })
+      return c.redirect('/login?error=1')
+    }
 
-  const valid = [
-    { user: getEnvVar('ADMIN_USER'), pass: getEnvVar('ADMIN_PASS') },
-    { user: getEnvVar('DEMO_USER'),  pass: getEnvVar('DEMO_PASS')  },
-  ].find((u) => u.user && u.user === username && u.pass === password)
+    // Look up user in database
+    const user = await queryOne<User>(db, 'SELECT * FROM users WHERE username = ? AND is_active = 1', [username])
 
-  if (!valid) {
-    await logAuthEvent('login_failure', username, c.req.raw, { reason: 'invalid_credentials' })
+    if (!user) {
+      await recordAttempt(db, clientIp, '/api/auth/login', undefined, LOGIN_WINDOW_MINUTES)
+      await logAuthEvent('login_failure', null, c.req.raw, {
+        db,
+        reason: `user_not_found: ${username}`,
+        ip: clientIp,
+      })
+      return c.redirect('/login?error=1')
+    }
+
+    // Verify password
+    const passwordValid = await verifyPassword(password, user.password_hash)
+    if (!passwordValid) {
+      await recordAttempt(db, clientIp, '/api/auth/login', user.id, LOGIN_WINDOW_MINUTES)
+      await logAuthEvent('login_failure', user.id, c.req.raw, {
+        db,
+        reason: `invalid_password: ${username}`,
+        ip: clientIp,
+      })
+      return c.redirect('/login?error=1')
+    }
+
+    // Password is valid, create session
+    const secret = (c.env as AuthEnv)?.JWT_SECRET ?? (process.env.JWT_SECRET as string) ?? 'komcad-dev-secret'
+    const { token, sessionId } = await createSession(db, user.id, user.username, user.role, clientIp, userAgent, secret, 8)
+
+    // Update last_login_at
+    await queryOne(db, 'UPDATE users SET last_login_at = ? WHERE id = ?', [nowISO(), user.id])
+
+    // Set cookie
+    setCookie(c, 'komcad_token', token, {
+      httpOnly: true,
+      path: '/',
+      maxAge: 60 * 60 * 8,
+      sameSite: 'Lax',
+    })
+
+    await logAuthEvent('login_success', user.id, c.req.raw, {
+      db,
+      ip: clientIp,
+      sessionId,
+    })
+
+    return c.redirect('/')
+  } catch (error) {
+    console.error('Login error:', error)
     return c.redirect('/login?error=1')
   }
-
-  const secret = getEnvVar('JWT_SECRET') || 'komcad-dev-secret'
-  const token  = await sign(
-    { sub: username, iat: Math.floor(Date.now() / 1000), exp: Math.floor(Date.now() / 1000) + 60 * 60 * 8 },
-    secret,
-    'HS256'
-  )
-
-  const sessionExpiresAt = new Date((Math.floor(Date.now() / 1000) + 60 * 60 * 8) * 1000)
-  setCookie(c, 'komcad_token', token, {
-    httpOnly: true,
-    path: '/',
-    maxAge: 60 * 60 * 8,
-    sameSite: 'Lax',
-  })
-
-  await logAuthEvent('login_success', username, c.req.raw, { sessionExpiresAt })
-  loginAttempts.delete(clientIp)
-  return c.redirect('/')
 })
 
 // ── GET /logout ────────────────────────────────────────────────────────────
 auth.get('/logout', async (c) => {
-  const token = getCookie(c, 'komcad_token')
-  let username = 'unknown'
-  if (token) {
-    try { username = (decode(token).payload as any)?.sub ?? 'unknown' } catch {}
+  try {
+    const db = getDB(c)
+    const token = getCookie(c, 'komcad_token')
+    const clientIp = getClientIp(c)
+
+    if (token) {
+      const secret = (c.env as AuthEnv)?.JWT_SECRET ?? (process.env.JWT_SECRET as string) ?? 'komcad-dev-secret'
+      const sessionData = await validateSession(db, token, secret)
+      if (sessionData) {
+        await expireSession(db, sessionData.payload.sid)
+        await logAuthEvent('logout', sessionData.session.user_id, c.req.raw, {
+          db,
+          ip: clientIp,
+          sessionId: sessionData.payload.sid,
+        })
+      }
+    }
+
+    deleteCookie(c, 'komcad_token', { path: '/' })
+    return c.redirect('/login')
+  } catch (error) {
+    console.error('Logout error:', error)
+    deleteCookie(c, 'komcad_token', { path: '/' })
+    return c.redirect('/login')
   }
-  deleteCookie(c, 'komcad_token', { path: '/' })
-  await logAuthEvent('logout', username, c.req.raw)
-  return c.redirect('/login')
 })
 
 // ── Login page HTML ────────────────────────────────────────────────────────
-function loginPage(hasError: boolean): string {
+function loginPage(hasError: boolean, isLocalDev: boolean): string {
+  const stylesheetPath = isLocalDev ? '/src/style.css' : '/static/style.css'
   return `<!DOCTYPE html>
 <html data-theme="dim">
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>KOMCAD — Login</title>
-  <link rel="stylesheet" href="/static/style.css" />
+  <link rel="stylesheet" href="${stylesheetPath}" />
 </head>
 <body class="bg-base-200 min-h-screen flex items-center justify-center p-4">
   <div class="w-full max-w-sm space-y-6">
