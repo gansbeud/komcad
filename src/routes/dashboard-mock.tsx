@@ -189,22 +189,22 @@ dashboardMock.get('/', async (c) => {
   const maliciousRate = totalChecks > 0 ? Math.round((maliciousChecks / totalChecks) * 100) : 0
 
   return c.render(
-    <div class="space-y-6">
-      <div class="card bg-gradient-to-r from-base-200 via-base-100 to-base-200 border border-base-300 shadow-lg">
-        <div class="card-body py-5">
-          <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+    <div class="space-y-5" id="dashboard-mock">
+      <div class="card bg-linear-to-r from-base-200 via-base-100 to-base-200 border border-base-300 shadow-lg">
+        <div class="card-body py-4 md:py-5 gap-3">
+          <div class="flex flex-wrap items-start justify-between gap-3">
             <div>
               <h1 class="text-2xl sm:text-3xl font-bold">Security Operations Dashboard</h1>
-              <p class="text-sm opacity-70">Live visualization from D1 audit and intelligence telemetry.</p>
+              <p class="text-xs sm:text-sm opacity-70 mt-0.5">Live visualization from D1 audit and intelligence telemetry.</p>
             </div>
-            <div class="flex items-center gap-2">
-              <span class={`badge ${maliciousRate >= 50 ? 'badge-error' : maliciousRate >= 20 ? 'badge-warning' : 'badge-success'} badge-lg`}>
+            <div class="flex items-center gap-2 flex-wrap">
+              <span class={`badge ${maliciousRate >= 50 ? 'badge-error' : maliciousRate >= 20 ? 'badge-warning' : 'badge-success'} badge-sm sm:badge-lg`}>
                 Malicious Rate: {maliciousRate}%
               </span>
               <a
                 href="/intelligence"
                 {...{ 'hx-get': '/intelligence', 'hx-target': '#page-content', 'hx-push-url': 'true', 'hx-swap': 'innerHTML' }}
-                class="btn btn-primary btn-sm"
+                class="btn btn-primary btn-xs sm:btn-sm"
               >
                 Run Intelligence Check
               </a>
@@ -241,42 +241,42 @@ dashboardMock.get('/', async (c) => {
         </div>
       </div>
 
-      <div class="grid grid-cols-1 xl:grid-cols-2 gap-6">
+      <div class="grid grid-cols-1 xl:grid-cols-2 gap-4 md:gap-6">
         <div class="card bg-base-100 border border-base-300 shadow-md">
-          <div class="card-body">
-            <div class="flex items-center justify-between mb-3">
+          <div class="card-body p-3 sm:p-4 gap-3">
+            <div class="flex flex-wrap items-center justify-between gap-2">
               <div>
-                <h2 class="card-title">Check Activity</h2>
-                <p class="text-sm opacity-70">7-day window, hourly check volume.</p>
+                <h2 class="card-title text-base sm:text-lg">Check Activity</h2>
+                <p class="text-xs sm:text-sm opacity-70">7-day window, hourly check volume.</p>
               </div>
-              <span class="badge badge-outline">7d hourly</span>
+              <span class="badge badge-outline badge-sm">7d hourly</span>
             </div>
-            <div class="h-80 rounded-xl bg-base-200/60 p-2">
+            <div class="h-56 sm:h-64 lg:h-80 rounded-xl bg-base-200/60 p-2">
               <canvas id="checkActivityChart" style="width:100%;height:100%;display:block;"></canvas>
             </div>
           </div>
         </div>
 
         <div class="card bg-base-100 border border-base-300 shadow-md">
-          <div class="card-body">
-            <div class="flex items-center justify-between mb-3">
+          <div class="card-body p-3 sm:p-4 gap-3">
+            <div class="flex flex-wrap items-center justify-between gap-2">
               <div>
-                <h2 class="card-title">Threat Detected</h2>
-                <p class="text-sm opacity-70">7-day window, hourly malicious detections.</p>
+                <h2 class="card-title text-base sm:text-lg">Threat Detected</h2>
+                <p class="text-xs sm:text-sm opacity-70">7-day window, hourly malicious detections.</p>
               </div>
-              <span class="badge badge-outline">7d hourly</span>
+              <span class="badge badge-outline badge-sm">7d hourly</span>
             </div>
-            <div class="h-80 rounded-xl bg-base-200/60 p-2">
+            <div class="h-56 sm:h-64 lg:h-80 rounded-xl bg-base-200/60 p-2">
               <canvas id="threatDetectedChart" style="width:100%;height:100%;display:block;"></canvas>
             </div>
           </div>
         </div>
       </div>
 
-      <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      <div class="grid grid-cols-1 lg:grid-cols-2 gap-4 md:gap-6">
         <div class="card bg-base-100 border border-base-300 shadow-md">
-          <div class="card-body">
-            <h2 class="card-title">Auth Event Distribution (7 Days)</h2>
+          <div class="card-body p-3 sm:p-4 gap-3">
+            <h2 class="card-title text-base sm:text-lg">Auth Event Distribution (7 Days)</h2>
             <div class="flex flex-wrap gap-2 mt-1">
               {authRows.length === 0
                 ? <span class="badge badge-ghost">No auth events in window</span>
@@ -290,15 +290,15 @@ dashboardMock.get('/', async (c) => {
                   ))}
             </div>
             <div class="divider my-2"></div>
-            <h3 class="font-semibold text-sm opacity-80">Hot Indicators</h3>
+            <h3 class="font-semibold text-xs sm:text-sm opacity-80">Hot Indicators</h3>
             <div class="space-y-2 mt-2">
               {hotIndicators.length === 0
                 ? <div class="alert alert-soft"><span>No malicious indicator hotspots yet.</span></div>
                 : hotIndicators.map((row) => (
-                    <div key={row.indicator} class="flex items-center justify-between bg-base-200/60 rounded-lg px-3 py-2">
+                    <div key={row.indicator} class="flex items-center justify-between gap-2 bg-base-200/60 rounded-lg px-3 py-2">
                       <div class="min-w-0">
                         <p class="font-mono text-xs truncate">{row.indicator}</p>
-                        <p class="text-xs opacity-60">Last seen {new Date(row.last_seen).toLocaleString('en-GB')}</p>
+                        <p class="text-[11px] sm:text-xs opacity-60">Last seen {new Date(row.last_seen).toLocaleString('en-GB')}</p>
                       </div>
                       <span class="badge badge-error badge-sm">{row.hits} hits</span>
                     </div>
@@ -308,13 +308,13 @@ dashboardMock.get('/', async (c) => {
         </div>
 
         <div class="card bg-base-100 border border-base-300 shadow-md">
-          <div class="card-body">
-            <div class="flex items-center justify-between">
-              <h2 class="card-title">Latest Malicious Events</h2>
-              <span class="badge badge-outline">Newest first</span>
+          <div class="card-body p-3 sm:p-4 gap-2">
+            <div class="flex flex-wrap items-center justify-between gap-2">
+              <h2 class="card-title text-base sm:text-lg">Latest Malicious Events</h2>
+              <span class="badge badge-outline badge-sm">Newest first</span>
             </div>
             <div class="overflow-x-auto mt-2">
-              <table class="table table-zebra table-sm">
+              <table class="table table-zebra table-xs sm:table-sm">
                 <thead>
                   <tr>
                     <th>Indicator</th>

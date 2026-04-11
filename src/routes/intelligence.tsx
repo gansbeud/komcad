@@ -221,7 +221,7 @@ intelligence.post('/api/check', async (c) => {
 
       // Log each indicator result
       const _userId = (c as any).get?.('user_id') as string ?? 'unknown'
-      void logCheckEvents('intelligence', mode, source,
+      await logCheckEvents('intelligence', mode, source,
         combinedResults.map((r) => {
           const hasError = Object.keys(r.errors).length > 0 && !r.abdb && !r.vt && !r.otx
           const summaryObj: Record<string, any> = {}
@@ -854,7 +854,7 @@ intelligence.post('/api/check', async (c) => {
 
     // Log each indicator result
     const _userId = (c as any).get?.('user_id') as string ?? 'unknown'
-    void logCheckEvents('intelligence', mode, source,
+    await logCheckEvents('intelligence', mode, source,
       results.map((r) => {
         if (r.error) return { indicator: r.indicator, result: 'error' as const, detail: r.error, summary: null, is_malicious: null }
         const s = r.result

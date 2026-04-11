@@ -45,7 +45,7 @@ whois.post('/api/lookup', async (c) => {
 
   // Log each lookup result
   const _userId = (c as any).get?.('user_id') as string ?? 'unknown'
-  void logCheckEvents('whois', 'whois', 'ipinfo.io', [
+  await logCheckEvents('whois', 'whois', 'ipinfo.io', [
     ...ok.map((r) => ({
       indicator: r.data!.ip || r.ip,
       result: 'success' as const,
