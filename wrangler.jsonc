@@ -13,7 +13,7 @@
       "database_id": "c13597a5-45d9-47b4-89cd-0cd69dd70685",
       "migrations_dir": "src/db/migrations"
     }
-  ],
+  ]
   // For sensitive secrets, use: wrangler secret put VARIABLE_NAME
   // This will prompt you to enter the value securely and store it in Cloudflare
   // 
